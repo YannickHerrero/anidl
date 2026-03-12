@@ -1,21 +1,25 @@
-# Next.js template
+# anidl
 
-This is a Next.js template with shadcn/ui.
+Private learning project for exploring a TMDB + Torrentio + Real-Debrid workflow in a Next.js app.
 
-## Adding components
+## Current scope
 
-To add components to your app, run the following command:
+- onboarding page with local browser storage for the TMDB and Real-Debrid API keys
+- gated search page skeleton
+- gated movie and TV detail page skeleton
+
+Both keys are currently mandatory, and the project is intentionally focused on a Real-Debrid-only download flow.
+
+## Local development
 
 ```bash
-npx shadcn@latest add button
+bun dev
 ```
 
-This will place the ui components in the `components` directory.
+Useful checks:
 
-## Using components
-
-To use the components in your app, import them as follows:
-
-```tsx
-import { Button } from "@/components/ui/button";
+```bash
+bun lint
+bun typecheck
+bun build
 ```
