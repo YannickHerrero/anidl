@@ -208,6 +208,7 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
 
       {displayDetail?.mediaType === "tv" && displayDetail.seasonCount ? (
         <SeasonSelector
+          tmdbId={tmdbId}
           seasonCount={displayDetail.seasonCount}
           selectedSeason={selectedSeason}
           onSelect={(seasonNumber) => {
@@ -273,10 +274,12 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
 }
 
 function SeasonSelector({
+  tmdbId,
   seasonCount,
   selectedSeason,
   onSelect,
 }: {
+  tmdbId: number
   seasonCount: number
   selectedSeason: number
   onSelect: (seasonNumber: number) => void
@@ -300,6 +303,13 @@ function SeasonSelector({
             </Button>
           )
         )}
+      </div>
+      <div>
+        <Button asChild variant="outline" className="rounded-2xl">
+          <Link href={`/media/tv/${tmdbId}/season/${selectedSeason}`}>
+            Download season
+          </Link>
+        </Button>
       </div>
     </section>
   )
