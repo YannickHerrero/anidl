@@ -19,7 +19,7 @@ const fontMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "anidl",
   description:
-    "Private learning app for TMDB discovery, Torrentio source lookup, and Real-Debrid downloads.",
+    "Open source anime and TV search app for TMDB discovery, cached Torrentio source matching, season review, and Real-Debrid powered downloads.",
 }
 
 export default function RootLayout({
