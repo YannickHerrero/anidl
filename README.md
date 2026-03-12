@@ -110,3 +110,7 @@ Not implemented yet:
 ## Disclaimer
 
 This project is provided as-is for educational and personal-use experimentation. Make sure your usage complies with the rules and laws that apply to your region and the services you use.
+
+## Legal note
+
+This project is an interface for aggregating metadata and results from third-party services. It does not host, upload, store, stream, or distribute copyrighted media. Users are responsible for ensuring their use complies with applicable law and the terms of the services they connect.
