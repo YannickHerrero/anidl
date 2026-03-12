@@ -11,6 +11,9 @@ export const emptyAppConfig: AppConfig = {
   realDebridApiKey: "",
 }
 
+let cachedConfig = emptyAppConfig
+let cachedSerializedConfig = ""
+
 export function normalizeAppConfig(
   input?: Partial<AppConfig> | null
 ): AppConfig {
@@ -30,15 +33,25 @@ export function readStoredAppConfig() {
   }
 
   try {
-    const raw = window.localStorage.getItem(APP_CONFIG_STORAGE_KEY)
+    const raw = window.localStorage.getItem(APP_CONFIG_STORAGE_KEY) ?? ""
 
     if (!raw) {
-      return emptyAppConfig
+      cachedSerializedConfig = ""
+      cachedConfig = emptyAppConfig
+      return cachedConfig
     }
 
-    return normalizeAppConfig(JSON.parse(raw) as Partial<AppConfig>)
+    if (raw === cachedSerializedConfig) {
+      return cachedConfig
+    }
+
+    cachedSerializedConfig = raw
+    cachedConfig = normalizeAppConfig(JSON.parse(raw) as Partial<AppConfig>)
+    return cachedConfig
   } catch {
-    return emptyAppConfig
+    cachedSerializedConfig = ""
+    cachedConfig = emptyAppConfig
+    return cachedConfig
   }
 }
 
@@ -66,12 +79,13 @@ export function subscribeToHydration() {
 
 export function saveStoredAppConfig(config: AppConfig) {
   const normalized = normalizeAppConfig(config)
+  const serializedConfig = JSON.stringify(normalized)
+
+  cachedConfig = normalized
+  cachedSerializedConfig = serializedConfig
 
   if (typeof window !== "undefined") {
-    window.localStorage.setItem(
-      APP_CONFIG_STORAGE_KEY,
-      JSON.stringify(normalized)
-    )
+    window.localStorage.setItem(APP_CONFIG_STORAGE_KEY, serializedConfig)
     window.dispatchEvent(new Event(APP_CONFIG_STORAGE_EVENT))
   }
 
