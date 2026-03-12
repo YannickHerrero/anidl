@@ -64,6 +64,31 @@ type TmdbTvDetailResponse = TmdbDetailBase & {
   }>
 }
 
+type TmdbExternalIdsResponse = {
+  imdb_id?: string | null
+}
+
+type TmdbSeasonEpisodeResponse = {
+  id: number
+  episode_number?: number
+  name?: string
+  overview?: string
+  still_path?: string | null
+  air_date?: string
+  runtime?: number | null
+  vote_average?: number
+}
+
+type TmdbSeasonDetailResponse = {
+  id: number
+  name?: string
+  overview?: string
+  season_number?: number
+  poster_path?: string | null
+  air_date?: string
+  episodes?: TmdbSeasonEpisodeResponse[]
+}
+
 export type SearchMediaItem = {
   id: number
   mediaType: SearchMediaType
@@ -106,6 +131,31 @@ export type MediaDetail = {
   creators: string[]
 }
 
+export type MediaExternalIds = {
+  imdbId: string | null
+}
+
+export type TvEpisodeDetail = {
+  id: number
+  episodeNumber: number
+  title: string
+  overview: string
+  stillPath: string | null
+  airDate: string | null
+  runtime: number | null
+  voteAverage: number | null
+}
+
+export type TvSeasonDetail = {
+  id: number
+  seasonNumber: number
+  title: string
+  overview: string
+  posterPath: string | null
+  airDate: string | null
+  episodes: TvEpisodeDetail[]
+}
+
 type SearchTmdbMediaOptions = {
   apiKey: string
   query: string
@@ -121,6 +171,20 @@ type FetchTmdbMediaDetailOptions = {
   signal?: AbortSignal
 }
 
+type FetchTmdbExternalIdsOptions = {
+  apiKey: string
+  mediaType: SearchMediaType
+  tmdbId: number
+  signal?: AbortSignal
+}
+
+type FetchTmdbTvSeasonDetailOptions = {
+  apiKey: string
+  tmdbId: number
+  seasonNumber: number
+  signal?: AbortSignal
+}
+
 const TMDB_BASE_URL = "https://api.themoviedb.org/3"
 const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 
@@ -130,6 +194,71 @@ export function getTmdbImageUrl(path: string | null, size = "w342") {
   }
 
   return `${TMDB_IMAGE_BASE_URL}/${size}${path}`
+}
+
+export async function fetchTmdbExternalIds({
+  apiKey,
+  mediaType,
+  tmdbId,
+  signal,
+}: FetchTmdbExternalIdsOptions): Promise<MediaExternalIds> {
+  const params = new URLSearchParams({
+    api_key: apiKey,
+  })
+
+  const response = await fetch(
+    `${TMDB_BASE_URL}/${mediaType}/${tmdbId}/external_ids?${params}`,
+    {
+      signal,
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(`TMDB external ids failed with status ${response.status}`)
+  }
+
+  const payload = (await response.json()) as TmdbExternalIdsResponse
+
+  return {
+    imdbId: normalizeOptionalText(payload.imdb_id),
+  }
+}
+
+export async function fetchTmdbTvSeasonDetail({
+  apiKey,
+  tmdbId,
+  seasonNumber,
+  signal,
+}: FetchTmdbTvSeasonDetailOptions): Promise<TvSeasonDetail> {
+  const params = new URLSearchParams({
+    api_key: apiKey,
+  })
+
+  const response = await fetch(
+    `${TMDB_BASE_URL}/tv/${tmdbId}/season/${seasonNumber}?${params}`,
+    {
+      signal,
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(`TMDB season failed with status ${response.status}`)
+  }
+
+  const payload = (await response.json()) as TmdbSeasonDetailResponse
+
+  return {
+    id: payload.id,
+    seasonNumber:
+      typeof payload.season_number === "number"
+        ? payload.season_number
+        : seasonNumber,
+    title: payload.name?.trim() || `Season ${seasonNumber}`,
+    overview: payload.overview?.trim() ?? "",
+    posterPath: payload.poster_path ?? null,
+    airDate: payload.air_date?.trim() || null,
+    episodes: normalizeSeasonEpisodes(payload.episodes),
+  }
 }
 
 export async function searchTmdbMedia({
@@ -280,6 +409,34 @@ function normalizeMovieDetail(payload: TmdbMovieDetailResponse): MediaDetail {
     episodeCount: null,
     creators: [],
   }
+}
+
+function normalizeSeasonEpisodes(
+  episodes: TmdbSeasonEpisodeResponse[] | undefined
+) {
+  return (
+    episodes
+      ?.map((episode) => {
+        if (typeof episode.episode_number !== "number") {
+          return null
+        }
+
+        return {
+          id: episode.id,
+          episodeNumber: episode.episode_number,
+          title: episode.name?.trim() || `Episode ${episode.episode_number}`,
+          overview: episode.overview?.trim() ?? "",
+          stillPath: episode.still_path ?? null,
+          airDate: episode.air_date?.trim() || null,
+          runtime: typeof episode.runtime === "number" ? episode.runtime : null,
+          voteAverage:
+            typeof episode.vote_average === "number"
+              ? episode.vote_average
+              : null,
+        }
+      })
+      .filter((episode): episode is TvEpisodeDetail => episode !== null) ?? []
+  )
 }
 
 function normalizeTvDetail(payload: TmdbTvDetailResponse): MediaDetail {
