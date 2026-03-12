@@ -139,30 +139,30 @@ function DetailCard({ detail }: { detail: MediaDetail }) {
             alt=""
             width={1280}
             height={720}
-            className="h-48 w-full object-cover sm:h-64"
+            className="h-40 w-full object-cover sm:h-48 lg:h-56"
           />
         ) : (
-          <div className="h-48 bg-[radial-gradient(circle_at_top_left,rgba(208,237,225,0.9),transparent_34%),radial-gradient(circle_at_top_right,rgba(243,219,180,0.72),transparent_28%),linear-gradient(180deg,#dce9df_0%,#efe7d7_100%)] sm:h-64" />
+          <div className="h-40 bg-[radial-gradient(circle_at_top_left,rgba(208,237,225,0.9),transparent_34%),radial-gradient(circle_at_top_right,rgba(243,219,180,0.72),transparent_28%),linear-gradient(180deg,#dce9df_0%,#efe7d7_100%)] sm:h-48 lg:h-56" />
         )}
-        <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-7">
+        <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-6 lg:p-7">
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-[0.18em] text-white/78 uppercase">
             <span>{detail.mediaType === "movie" ? "Movie" : "TV show"}</span>
             {detail.year ? <span>{detail.year}</span> : null}
             {detail.status ? <span>{detail.status}</span> : null}
           </div>
-          <h1 className="mt-3 max-w-4xl text-3xl font-semibold tracking-[-0.04em] text-white sm:text-5xl">
+          <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl lg:text-[2.8rem]">
             {detail.title}
           </h1>
           {detail.tagline ? (
-            <p className="mt-3 text-sm text-white/78 sm:text-base">
+            <p className="mt-2 max-w-2xl text-sm text-white/78 lg:text-[0.95rem]">
               {detail.tagline}
             </p>
           ) : null}
         </div>
       </div>
 
-      <div className="grid gap-6 p-5 md:grid-cols-[240px_minmax(0,1fr)] md:p-7">
-        <div className="overflow-hidden rounded-[26px] border border-border/70 bg-[linear-gradient(145deg,rgba(208,237,225,0.42),rgba(243,219,180,0.35))]">
+      <div className="grid gap-6 p-5 md:grid-cols-[200px_minmax(0,1fr)] md:p-6 xl:grid-cols-[180px_minmax(0,1fr)] 2xl:grid-cols-[200px_minmax(0,1fr)]">
+        <div className="mx-auto w-full max-w-[240px] overflow-hidden rounded-[26px] border border-border/70 bg-[linear-gradient(145deg,rgba(208,237,225,0.42),rgba(243,219,180,0.35))] md:mx-0 md:max-w-none">
           {posterUrl ? (
             <Image
               src={posterUrl}
@@ -180,13 +180,13 @@ function DetailCard({ detail }: { detail: MediaDetail }) {
           )}
         </div>
 
-        <div className="grid gap-6">
+        <div className="grid gap-6 xl:max-w-5xl">
           {detail.overview ? (
             <section>
               <h2 className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
                 Overview
               </h2>
-              <p className="mt-3 text-sm leading-7 text-muted-foreground">
+              <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">
                 {detail.overview}
               </p>
             </section>
