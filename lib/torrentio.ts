@@ -47,6 +47,7 @@ export type TorrentioSource = {
   title: string
   quality: string | null
   size: string | null
+  sizeBytes: number
   seeders: number | null
   videoCodec: string | null
   audio: string | null
@@ -58,6 +59,8 @@ export type TorrentioSource = {
   url: string | null
   infoHash: string | null
   fileIdx: number | null
+  score: number
+  isRecommended: boolean
 }
 
 export async function fetchTorrentioMovieSources({
@@ -68,6 +71,7 @@ export async function fetchTorrentioMovieSources({
   return fetchTorrentioSources({
     path: `movie/${imdbId}`,
     realDebridApiKey,
+    mediaType: "movie",
     signal,
   })
 }
@@ -82,6 +86,7 @@ export async function fetchTorrentioEpisodeSources({
   return fetchTorrentioSources({
     path: `series/${imdbId}:${seasonNumber}:${episodeNumber}`,
     realDebridApiKey,
+    mediaType: "tv",
     signal,
   })
 }
@@ -93,10 +98,12 @@ export function getSourceLabel(mediaType: SearchMediaType) {
 async function fetchTorrentioSources({
   path,
   realDebridApiKey,
+  mediaType,
   signal,
 }: {
   path: string
   realDebridApiKey: string
+  mediaType: SearchMediaType
   signal?: AbortSignal
 }) {
   const config = buildTorrentioConfig(realDebridApiKey)
@@ -113,7 +120,11 @@ async function fetchTorrentioSources({
 
   const payload = (await response.json()) as TorrentioResponse
 
-  return payload.streams.map(normalizeTorrentioSource)
+  return sortAndRecommendSources(
+    payload.streams.map((source, index) =>
+      normalizeTorrentioSource(source, index, mediaType)
+    )
+  )
 }
 
 function buildTorrentioConfig(realDebridApiKey: string) {
@@ -130,7 +141,8 @@ function buildTorrentioConfig(realDebridApiKey: string) {
 
 function normalizeTorrentioSource(
   source: TorrentioStreamResponse,
-  index: number
+  index: number,
+  mediaType: SearchMediaType
 ): TorrentioSource {
   const sizeMatch = source.title.match(/💾\s*([\d.]+\s*(?:GB|MB|TB))/i)
   const seedersMatch = source.title.match(/👤\s*(\d+)/)
@@ -157,13 +169,16 @@ function normalizeTorrentioSource(
 
   const provider = source.name.trim() || "torrentio"
   const normalizedTitle = source.title.replace(/\n+/g, " ").trim()
+  const sizeBytes = parseSizeBytes(sizeMatch?.[1] ?? null)
+  const quality = qualityMatch?.[1]?.toUpperCase() ?? null
 
   return {
     id: `${provider}-${source.infoHash ?? source.url ?? index}`,
     provider,
     title: normalizedTitle,
-    quality: qualityMatch?.[1]?.toUpperCase() ?? null,
+    quality,
     size: sizeMatch?.[1] ?? null,
+    sizeBytes,
     seeders: seedersMatch ? Number(seedersMatch[1]) : null,
     videoCodec: codecMatch?.[1] ?? null,
     audio: audioMatch?.[0] ?? null,
@@ -177,7 +192,204 @@ function normalizeTorrentioSource(
     url: source.url ?? null,
     infoHash: source.infoHash ?? null,
     fileIdx: typeof source.fileIdx === "number" ? source.fileIdx : null,
+    score: calculateSourceScore({
+      title: normalizedTitle,
+      quality,
+      sizeBytes,
+      seeders: seedersMatch ? Number(seedersMatch[1]) : null,
+      isCached: source.title.includes("[RD+") || source.title.includes("[⚡]"),
+      languageCount: languageMatches.length,
+      mediaType,
+    }),
+    isRecommended: false,
   }
+}
+
+function sortAndRecommendSources(sources: TorrentioSource[]) {
+  const sortedSources = [...sources].sort((left, right) => {
+    if (right.score !== left.score) {
+      return right.score - left.score
+    }
+
+    const qualityRankDelta =
+      getQualityRank(right.quality) - getQualityRank(left.quality)
+
+    if (qualityRankDelta !== 0) {
+      return qualityRankDelta
+    }
+
+    return left.sizeBytes - right.sizeBytes
+  })
+
+  return sortedSources.map((source, index) => ({
+    ...source,
+    isRecommended: index < 3 && source.score > 0,
+  }))
+}
+
+function calculateSourceScore({
+  title,
+  quality,
+  sizeBytes,
+  seeders,
+  isCached,
+  languageCount,
+  mediaType,
+}: {
+  title: string
+  quality: string | null
+  sizeBytes: number
+  seeders: number | null
+  isCached: boolean
+  languageCount: number
+  mediaType: SearchMediaType
+}) {
+  if (isLikelyTrailer({ title, quality, sizeBytes, mediaType })) {
+    return -10000
+  }
+
+  let score = 0
+
+  if (quality?.includes("1080P")) {
+    score += 1000
+  } else if (quality?.includes("720P")) {
+    score += 800
+  } else if (quality?.includes("2160P") || quality?.includes("4K")) {
+    score += 600
+  } else {
+    score += 400
+  }
+
+  if (isCached) {
+    score += 1000
+  }
+
+  score += languageCount * 30
+
+  if (seeders && seeders > 0) {
+    score += Math.log2(seeders + 1) * 50
+  }
+
+  if (sizeBytes < Number.MAX_SAFE_INTEGER) {
+    const sizeGb = sizeBytes / (1024 * 1024 * 1024)
+    score -= Math.pow(sizeGb, 1.5) * 80
+  }
+
+  return score
+}
+
+function isLikelyTrailer({
+  title,
+  quality,
+  sizeBytes,
+  mediaType,
+}: {
+  title: string
+  quality: string | null
+  sizeBytes: number
+  mediaType: SearchMediaType
+}) {
+  if (
+    /\b(trailer|promo|sample|preview|clip|extra|bonus|teaser|opening|ending|op|ed)\b/i.test(
+      title
+    )
+  ) {
+    return true
+  }
+
+  if (sizeBytes === Number.MAX_SAFE_INTEGER) {
+    return false
+  }
+
+  const sizeMb = sizeBytes / (1024 * 1024)
+  const normalizedQuality = quality?.toLowerCase() ?? ""
+
+  if (mediaType === "tv") {
+    if (
+      normalizedQuality.includes("2160p") ||
+      normalizedQuality.includes("4k")
+    ) {
+      return sizeMb < 400
+    }
+
+    if (normalizedQuality.includes("1080p")) {
+      return sizeMb < 150
+    }
+
+    if (normalizedQuality.includes("720p")) {
+      return sizeMb < 80
+    }
+
+    return sizeMb < 30
+  }
+
+  if (normalizedQuality.includes("2160p") || normalizedQuality.includes("4k")) {
+    return sizeMb < 2000
+  }
+
+  if (normalizedQuality.includes("1080p")) {
+    return sizeMb < 800
+  }
+
+  if (normalizedQuality.includes("720p")) {
+    return sizeMb < 400
+  }
+
+  return sizeMb < 150
+}
+
+function getQualityRank(quality: string | null) {
+  if (!quality) {
+    return 0
+  }
+
+  if (quality.includes("2160P") || quality.includes("4K")) {
+    return 4
+  }
+
+  if (quality.includes("1080P")) {
+    return 3
+  }
+
+  if (quality.includes("720P")) {
+    return 2
+  }
+
+  if (quality.includes("480P")) {
+    return 1
+  }
+
+  return 0
+}
+
+function parseSizeBytes(size: string | null) {
+  if (!size) {
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  const match = size.match(/^([\d.]+)\s*(GB|MB|TB)$/i)
+
+  if (!match) {
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  const value = Number(match[1])
+
+  if (!Number.isFinite(value)) {
+    return Number.MAX_SAFE_INTEGER
+  }
+
+  const unit = match[2].toUpperCase()
+
+  if (unit === "TB") {
+    return value * 1024 * 1024 * 1024 * 1024
+  }
+
+  if (unit === "GB") {
+    return value * 1024 * 1024 * 1024
+  }
+
+  return value * 1024 * 1024
 }
 
 function flagToLanguage(flag: string) {

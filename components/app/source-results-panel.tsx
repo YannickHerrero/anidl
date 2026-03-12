@@ -44,10 +44,15 @@ export function SourceResultsPanel({
           {sources.map((source) => (
             <article
               key={source.id}
-              className="grid gap-4 rounded-[24px] border border-border/70 bg-background/70 p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+              className={`grid gap-4 rounded-[24px] border p-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center ${
+                source.isRecommended
+                  ? "border-primary/35 bg-primary/8"
+                  : "border-border/70 bg-background/70"
+              }`}
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap gap-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+                  {source.isRecommended ? <span>Best pick</span> : null}
                   <span>{source.provider}</span>
                   {source.quality ? <span>{source.quality}</span> : null}
                   {source.size ? <span>{source.size}</span> : null}
