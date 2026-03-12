@@ -53,6 +53,9 @@ export function SeasonDownloadReview({
   const [selectedEpisodes, setSelectedEpisodes] = useState<
     Record<number, boolean>
   >({})
+  const [selectedSourceIds, setSelectedSourceIds] = useState<
+    Record<number, string>
+  >({})
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -109,6 +112,15 @@ export function SeasonDownloadReview({
 
         const nextFamilies = rankSourceFamilies(episodeSourceSets)
         const nextFamilyKey = nextFamilies[0]?.key ?? null
+        const nextSelectedSourceIds = Object.fromEntries(
+          episodeSourceSets.flatMap(({ episode, candidates }) => {
+            const candidate = nextFamilyKey
+              ? selectBestFamilyCandidate(nextFamilyKey, candidates)
+              : null
+
+            return candidate ? [[episode.episodeNumber, candidate.id]] : []
+          })
+        )
 
         setSelectedFamilyKey(nextFamilyKey)
         setSelectedEpisodes(
@@ -121,6 +133,7 @@ export function SeasonDownloadReview({
             ])
           )
         )
+        setSelectedSourceIds(nextSelectedSourceIds)
 
         setReviewState({
           status: "success",
@@ -160,10 +173,10 @@ export function SeasonDownloadReview({
   const selectedFamily =
     families.find((family) => family.key === selectedFamilyKey) ?? null
   const selectedCandidates = reviewState.episodeSourceSets.map(
-    ({ candidates }) =>
-      selectedFamilyKey
-        ? selectBestFamilyCandidate(selectedFamilyKey, candidates)
-        : null
+    ({ candidates, episode }) =>
+      candidates.find(
+        (candidate) => candidate.id === selectedSourceIds[episode.episodeNumber]
+      ) ?? null
   )
   const baseline = buildFamilyBaseline(selectedCandidates)
 
@@ -211,7 +224,36 @@ export function SeasonDownloadReview({
               type="button"
               variant={family.key === selectedFamilyKey ? "default" : "outline"}
               className="rounded-2xl"
-              onClick={() => setSelectedFamilyKey(family.key)}
+              onClick={() => {
+                setSelectedFamilyKey(family.key)
+                setSelectedEpisodes(
+                  Object.fromEntries(
+                    reviewState.episodeSourceSets.map(
+                      ({ episode, candidates }) => [
+                        episode.episodeNumber,
+                        selectBestFamilyCandidate(family.key, candidates) !==
+                          null,
+                      ]
+                    )
+                  )
+                )
+                setSelectedSourceIds(
+                  Object.fromEntries(
+                    reviewState.episodeSourceSets.flatMap(
+                      ({ episode, candidates }) => {
+                        const candidate = selectBestFamilyCandidate(
+                          family.key,
+                          candidates
+                        )
+
+                        return candidate
+                          ? [[episode.episodeNumber, candidate.id]]
+                          : []
+                      }
+                    )
+                  )
+                )
+              }}
             >
               {family.label || "Unnamed family"}
             </Button>
@@ -221,9 +263,11 @@ export function SeasonDownloadReview({
 
       <section className="grid gap-3 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
         {reviewState.episodeSourceSets.map(({ episode, candidates }) => {
-          const selectedSource = selectedFamilyKey
-            ? selectBestFamilyCandidate(selectedFamilyKey, candidates)
-            : null
+          const selectedSource =
+            candidates.find(
+              (candidate) =>
+                candidate.id === selectedSourceIds[episode.episodeNumber]
+            ) ?? null
           const warnings = getEpisodeSourceWarnings({
             candidate: selectedSource,
             selectedFamilyKey: selectedFamilyKey ?? "",
@@ -257,6 +301,32 @@ export function SeasonDownloadReview({
                 <p className="mt-2 text-sm break-words text-muted-foreground">
                   {selectedSource?.title ?? "No family match"}
                 </p>
+                {candidates.length > 0 ? (
+                  <select
+                    value={selectedSourceIds[episode.episodeNumber] ?? ""}
+                    className="mt-3 w-full rounded-2xl border border-border/70 bg-card px-3 py-2 text-sm text-foreground"
+                    onChange={(event) => {
+                      const nextSourceId = event.target.value
+
+                      setSelectedSourceIds((current) => ({
+                        ...current,
+                        [episode.episodeNumber]: nextSourceId,
+                      }))
+                      setSelectedEpisodes((current) => ({
+                        ...current,
+                        [episode.episodeNumber]: nextSourceId.length > 0,
+                      }))
+                    }}
+                  >
+                    <option value="">No source</option>
+                    {candidates.map((candidate) => (
+                      <option key={candidate.id} value={candidate.id}>
+                        {candidate.provider} - {candidate.quality ?? "Unknown"}{" "}
+                        - {candidate.size ?? "Unknown size"}
+                      </option>
+                    ))}
+                  </select>
+                ) : null}
                 <div className="mt-3 flex flex-wrap gap-2 text-xs">
                   {warnings.titleMismatch ? (
                     <WarningTag label="Title mismatch" />
