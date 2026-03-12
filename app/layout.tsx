@@ -1,15 +1,26 @@
-import { Geist, Geist_Mono, Inter } from "next/font/google"
+import type { Metadata } from "next"
+import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google"
 
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { cn } from "@/lib/utils"
 
-const inter = Inter({subsets:['latin'],variable:'--font-sans'})
+const fontSans = Space_Grotesk({
+  subsets: ["latin"],
+  variable: "--font-sans",
+})
 
-const fontMono = Geist_Mono({
+const fontMono = IBM_Plex_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+  weight: ["400", "500", "600"],
 })
+
+export const metadata: Metadata = {
+  title: "anidl",
+  description:
+    "Private learning app for TMDB discovery, Torrentio source lookup, and Real-Debrid downloads.",
+}
 
 export default function RootLayout({
   children,
@@ -20,7 +31,11 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", inter.variable)}
+      className={cn(
+        "font-sans antialiased",
+        fontSans.variable,
+        fontMono.variable
+      )}
     >
       <body>
         <ThemeProvider>{children}</ThemeProvider>
