@@ -195,6 +195,31 @@ export function getTmdbImageUrl(path: string | null, size = "w342") {
   return `${TMDB_IMAGE_BASE_URL}/${size}${path}`
 }
 
+export async function validateTmdbApiKey({
+  apiKey,
+  signal,
+}: {
+  apiKey: string
+  signal?: AbortSignal
+}) {
+  const params = new URLSearchParams({
+    query: "heat",
+    page: "1",
+    include_adult: "false",
+  })
+
+  const response = await fetch(`/api/tmdb/search/multi?${params}`, {
+    headers: {
+      "x-tmdb-api-key": apiKey,
+    },
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`TMDB validation failed with status ${response.status}`)
+  }
+}
+
 export async function fetchTmdbExternalIds({
   apiKey,
   mediaType,

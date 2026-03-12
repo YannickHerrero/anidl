@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { type AppConfig } from "@/lib/app-config"
+import { validateRealDebridApiKey } from "@/lib/real-debrid"
+import { validateTmdbApiKey } from "@/lib/tmdb"
 
 type FieldName = keyof AppConfig
 
@@ -93,6 +95,7 @@ function OnboardingFormFields({
 }: OnboardingFormFieldsProps) {
   const [values, setValues] = useState<AppConfig>(initialConfig)
   const [errors, setErrors] = useState<Errors>({})
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const isReadyToSave = useMemo(() => {
     return (
@@ -118,7 +121,7 @@ function OnboardingFormFields({
     })
   }
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
 
     const nextErrors = validateConfig(values)
@@ -128,9 +131,43 @@ function OnboardingFormFields({
       return
     }
 
-    onSave(values)
-    setErrors({})
-    onComplete()
+    setIsSubmitting(true)
+
+    try {
+      const [tmdbResult, realDebridResult] = await Promise.allSettled([
+        validateTmdbApiKey({ apiKey: values.tmdbApiKey }),
+        validateRealDebridApiKey({ apiKey: values.realDebridApiKey }),
+      ])
+
+      const validationErrors: Errors = {}
+
+      if (tmdbResult.status === "rejected") {
+        validationErrors.tmdbApiKey =
+          tmdbResult.reason instanceof Error &&
+          tmdbResult.reason.message.includes("status")
+            ? "TMDB rejected this API key. Double-check it and try again."
+            : "Could not validate the TMDB API key right now."
+      }
+
+      if (realDebridResult.status === "rejected") {
+        validationErrors.realDebridApiKey =
+          realDebridResult.reason instanceof Error &&
+          realDebridResult.reason.message.includes("status")
+            ? "Real-Debrid rejected this API key. Double-check it and try again."
+            : "Could not validate the Real-Debrid API key right now."
+      }
+
+      if (Object.keys(validationErrors).length > 0) {
+        setErrors(validationErrors)
+        return
+      }
+
+      onSave(values)
+      setErrors({})
+      onComplete()
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -184,6 +221,7 @@ function OnboardingFormFields({
                   placeholder={field.label}
                   autoComplete="off"
                   aria-invalid={hasError}
+                  disabled={isSubmitting}
                   className="h-13 rounded-2xl bg-background/75 px-4"
                 />
 
@@ -200,13 +238,20 @@ function OnboardingFormFields({
           })}
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <Button type="submit" size="lg" className="rounded-2xl px-6">
-              Save and continue
+            <Button
+              type="submit"
+              size="lg"
+              className="rounded-2xl px-6"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "Validating..." : "Save and continue"}
             </Button>
             <p className="text-sm text-muted-foreground">
-              {isReadyToSave
-                ? "Ready to continue."
-                : "Both fields are mandatory."}
+              {isSubmitting
+                ? "Checking both keys before saving."
+                : isReadyToSave
+                  ? "Ready to continue."
+                  : "Both fields are mandatory."}
             </p>
           </div>
         </form>
