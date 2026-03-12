@@ -57,7 +57,7 @@ export function OnboardingForm() {
 
   if (!isHydrated) {
     return (
-      <div className="rounded-[30px] border border-border/70 bg-card/84 p-6 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur sm:p-8">
+      <div className="rounded-[28px] border border-border/70 bg-card/92 p-6 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur sm:p-8">
         <p className="text-sm font-semibold tracking-[0.24em] text-muted-foreground uppercase">
           Credentials
         </p>
@@ -141,62 +141,20 @@ function OnboardingFormFields({
   }
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
-      <article className="overflow-hidden rounded-[30px] border border-border/70 bg-[linear-gradient(155deg,rgba(13,54,51,0.96),rgba(33,95,86,0.84))] p-6 text-primary-foreground shadow-[0_20px_100px_-42px_rgba(18,38,33,0.72)] sm:p-8">
-        <p className="text-sm font-semibold tracking-[0.24em] text-primary-foreground/72 uppercase">
-          Local setup
-        </p>
-        <h2 className="mt-4 text-3xl font-semibold tracking-[-0.04em]">
-          One browser, one private workspace.
-        </h2>
-        <p className="mt-4 max-w-xl text-sm leading-7 text-primary-foreground/78">
-          This first pass keeps credentials on the client only. That makes the
-          onboarding quick while leaving room to swap in encrypted server
-          storage later if you want to evolve the project.
-        </p>
-
-        <div className="mt-8 grid gap-4">
-          <div className="rounded-[22px] border border-white/12 bg-white/8 p-4 backdrop-blur">
-            <p className="text-sm font-medium">
-              TMDB drives search and metadata
-            </p>
-            <p className="mt-2 text-sm leading-6 text-primary-foreground/75">
-              Title lookup, artwork, release data, and media typing will start
-              from TMDB results.
-            </p>
-          </div>
-
-          <div className="rounded-[22px] border border-white/12 bg-white/8 p-4 backdrop-blur">
-            <p className="text-sm font-medium">
-              Real-Debrid drives the final download step
-            </p>
-            <p className="mt-2 text-sm leading-6 text-primary-foreground/75">
-              There is no direct torrent mode in this build. Torrentio results
-              will later be resolved through Real-Debrid only.
-            </p>
-          </div>
-
-          <div className="rounded-[22px] border border-white/12 bg-white/8 p-4 backdrop-blur">
-            <p className="text-sm font-medium">Current scope</p>
-            <p className="mt-2 text-sm leading-6 text-primary-foreground/75">
-              Onboarding is functional now, while search and detail routes are
-              intentionally skeletons for the next implementation pass.
-            </p>
-          </div>
-        </div>
-      </article>
-
-      <article className="rounded-[30px] border border-border/70 bg-card/84 p-6 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur sm:p-8">
+    <section>
+      <article className="rounded-[28px] border border-border/70 bg-card/92 p-6 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur sm:p-8">
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div>
             <p className="text-sm font-semibold tracking-[0.24em] text-muted-foreground uppercase">
               Credentials
             </p>
             <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-foreground">
-              Store both keys in local browser storage
+              Add your API keys
             </h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              {status}
+              {isConfigured
+                ? "Your keys are already saved in this browser."
+                : "Both services are required to continue."}
             </p>
           </div>
 
@@ -249,13 +207,10 @@ function OnboardingFormFields({
           })}
 
           <div className="rounded-[24px] border border-border/70 bg-background/72 p-4">
-            <p className="text-sm font-medium text-foreground">
-              What happens next
-            </p>
+            <p className="text-sm font-medium text-foreground">Included</p>
             <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              After saving, the app routes you to the search skeleton. That
-              route is already gated, so returning visitors with stored keys
-              skip straight into the app flow.
+              TMDB powers search and metadata. Real-Debrid powers the download
+              pipeline.
             </p>
           </div>
 
