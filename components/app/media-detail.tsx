@@ -17,12 +17,16 @@ import { useRecentMedia } from "@/hooks/use-recent-media"
 import {
   fetchTmdbExternalIds,
   fetchTmdbMediaDetail,
+  fetchTmdbTvSeasonDetail,
   getTmdbImageUrl,
   mediaDetailToSearchItem,
   type MediaDetail,
   type SearchMediaType,
+  type TvEpisodeDetail,
+  type TvSeasonDetail,
 } from "@/lib/tmdb"
 import {
+  fetchTorrentioEpisodeSources,
   fetchTorrentioMovieSources,
   type TorrentioSource,
 } from "@/lib/torrentio"
@@ -40,6 +44,12 @@ type DetailState =
 type SourceState = {
   status: "idle" | "loading" | "success" | "error"
   sources: TorrentioSource[]
+  message: string | null
+}
+
+type SeasonState = {
+  status: "idle" | "loading" | "success" | "error"
+  season: TvSeasonDetail | null
   message: string | null
 }
 
@@ -61,6 +71,12 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
     message: null,
   })
   const [selectedSeason, setSelectedSeason] = useState(1)
+  const [selectedEpisode, setSelectedEpisode] = useState<number | null>(null)
+  const [seasonState, setSeasonState] = useState<SeasonState>({
+    status: mediaType === "tv" ? "loading" : "idle",
+    season: null,
+    message: null,
+  })
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -146,7 +162,35 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         <SeasonSelector
           seasonCount={displayDetail.seasonCount}
           selectedSeason={selectedSeason}
-          onSelect={setSelectedSeason}
+          onSelect={(seasonNumber) => {
+            setSeasonState({
+              status: "loading",
+              season: null,
+              message: null,
+            })
+            setSourceState({
+              status: "idle",
+              sources: [],
+              message: null,
+            })
+            setSelectedEpisode(null)
+            setSelectedSeason(seasonNumber)
+          }}
+        />
+      ) : null}
+
+      {mediaType === "tv" ? (
+        <TvEpisodeSection
+          tmdbId={tmdbId}
+          tmdbApiKey={config.tmdbApiKey}
+          realDebridApiKey={config.realDebridApiKey}
+          selectedSeason={selectedSeason}
+          selectedEpisode={selectedEpisode}
+          seasonState={seasonState}
+          sourceState={sourceState}
+          onSeasonStateChange={setSeasonState}
+          onSelectedEpisodeChange={setSelectedEpisode}
+          onSourceStateChange={setSourceState}
         />
       ) : null}
 
@@ -196,6 +240,266 @@ function SeasonSelector({
         )}
       </div>
     </section>
+  )
+}
+
+function TvEpisodeSection({
+  tmdbId,
+  tmdbApiKey,
+  realDebridApiKey,
+  selectedSeason,
+  selectedEpisode,
+  seasonState,
+  sourceState,
+  onSeasonStateChange,
+  onSelectedEpisodeChange,
+  onSourceStateChange,
+}: {
+  tmdbId: number
+  tmdbApiKey: string
+  realDebridApiKey: string
+  selectedSeason: number
+  selectedEpisode: number | null
+  seasonState: SeasonState
+  sourceState: SourceState
+  onSeasonStateChange: Dispatch<SetStateAction<SeasonState>>
+  onSelectedEpisodeChange: Dispatch<SetStateAction<number | null>>
+  onSourceStateChange: Dispatch<SetStateAction<SourceState>>
+}) {
+  useEffect(() => {
+    const abortController = new AbortController()
+
+    void fetchTmdbTvSeasonDetail({
+      apiKey: tmdbApiKey,
+      tmdbId,
+      seasonNumber: selectedSeason,
+      signal: abortController.signal,
+    })
+      .then((season) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        onSeasonStateChange({
+          status: "success",
+          season,
+          message: null,
+        })
+
+        const firstEpisode = season.episodes[0]?.episodeNumber ?? null
+        onSelectedEpisodeChange(firstEpisode)
+        onSourceStateChange(
+          firstEpisode === null
+            ? {
+                status: "idle",
+                sources: [],
+                message: null,
+              }
+            : {
+                status: "loading",
+                sources: [],
+                message: null,
+              }
+        )
+      })
+      .catch((error: unknown) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        onSeasonStateChange({
+          status: "error",
+          season: null,
+          message:
+            error instanceof Error ? error.message : "Could not load season",
+        })
+      })
+
+    return () => {
+      abortController.abort()
+    }
+  }, [
+    onSeasonStateChange,
+    onSelectedEpisodeChange,
+    onSourceStateChange,
+    selectedSeason,
+    tmdbApiKey,
+    tmdbId,
+  ])
+
+  useEffect(() => {
+    if (selectedEpisode === null) {
+      return
+    }
+
+    const abortController = new AbortController()
+
+    void fetchTmdbExternalIds({
+      apiKey: tmdbApiKey,
+      mediaType: "tv",
+      tmdbId,
+      signal: abortController.signal,
+    })
+      .then((externalIds) => {
+        if (!externalIds.imdbId) {
+          throw new Error("IMDb ID not found")
+        }
+
+        return fetchTorrentioEpisodeSources({
+          imdbId: externalIds.imdbId,
+          seasonNumber: selectedSeason,
+          episodeNumber: selectedEpisode,
+          realDebridApiKey,
+          signal: abortController.signal,
+        })
+      })
+      .then((sources) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        onSourceStateChange({
+          status: "success",
+          sources,
+          message: null,
+        })
+      })
+      .catch((error: unknown) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        onSourceStateChange({
+          status: "error",
+          sources: [],
+          message:
+            error instanceof Error ? error.message : "Could not load sources",
+        })
+      })
+
+    return () => {
+      abortController.abort()
+    }
+  }, [
+    onSourceStateChange,
+    realDebridApiKey,
+    selectedEpisode,
+    selectedSeason,
+    tmdbApiKey,
+    tmdbId,
+  ])
+
+  return (
+    <>
+      <EpisodeSelector
+        seasonState={seasonState}
+        selectedEpisode={selectedEpisode}
+        onSelect={(episodeNumber) => {
+          onSourceStateChange({
+            status: "loading",
+            sources: [],
+            message: null,
+          })
+          onSelectedEpisodeChange(episodeNumber)
+        }}
+      />
+      <SourceResultsPanel
+        title="Sources"
+        status={sourceState.status}
+        sources={sourceState.sources}
+        message={sourceState.message}
+      />
+    </>
+  )
+}
+
+function EpisodeSelector({
+  seasonState,
+  selectedEpisode,
+  onSelect,
+}: {
+  seasonState: SeasonState
+  selectedEpisode: number | null
+  onSelect: (episodeNumber: number) => void
+}) {
+  return (
+    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
+      <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
+        Episodes
+      </p>
+
+      {seasonState.status === "loading" ? <StateCard label="Loading" /> : null}
+      {seasonState.status === "error" ? (
+        <StateCard label={seasonState.message ?? "Could not load episodes"} />
+      ) : null}
+      {seasonState.status === "success" &&
+      seasonState.season?.episodes.length === 0 ? (
+        <StateCard label="No episodes found" />
+      ) : null}
+
+      {seasonState.status === "success" && seasonState.season ? (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {seasonState.season.episodes.map((episode) => (
+            <EpisodeCard
+              key={episode.id}
+              episode={episode}
+              isSelected={episode.episodeNumber === selectedEpisode}
+              onSelect={onSelect}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+function EpisodeCard({
+  episode,
+  isSelected,
+  onSelect,
+}: {
+  episode: TvEpisodeDetail
+  isSelected: boolean
+  onSelect: (episodeNumber: number) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(episode.episodeNumber)}
+      className={`grid gap-3 rounded-[24px] border p-4 text-left transition-colors ${
+        isSelected
+          ? "border-primary/40 bg-primary/10"
+          : "border-border/70 bg-background/70 hover:border-primary/30"
+      }`}
+    >
+      <div className="flex flex-wrap gap-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+        <span>Episode {episode.episodeNumber}</span>
+        {episode.airDate ? <span>{formatDate(episode.airDate)}</span> : null}
+      </div>
+      <p className="text-sm font-medium text-foreground">{episode.title}</p>
+      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+        {episode.runtime ? <FactTag value={`${episode.runtime} min`} /> : null}
+        {episode.voteAverage !== null ? (
+          <FactTag value={`${episode.voteAverage.toFixed(1)} / 10`} />
+        ) : null}
+      </div>
+    </button>
+  )
+}
+
+function FactTag({ value }: { value: string }) {
+  return (
+    <span className="rounded-full border border-border/70 bg-card px-2.5 py-1 font-medium text-foreground">
+      {value}
+    </span>
+  )
+}
+
+function StateCard({ label }: { label: string }) {
+  return (
+    <div className="rounded-[24px] border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+      {label}
+    </div>
   )
 }
 
