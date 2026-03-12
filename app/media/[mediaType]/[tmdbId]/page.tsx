@@ -2,7 +2,7 @@ import { notFound } from "next/navigation"
 
 import { AppShell } from "@/components/app/app-shell"
 import { ConfigRequired } from "@/components/app/config-required"
-import { MediaDetailPreview } from "@/components/app/media-detail-preview"
+import { MediaDetail } from "@/components/app/media-detail"
 import { type SearchMediaType } from "@/lib/tmdb"
 
 type DetailPageProps = {
@@ -37,7 +37,7 @@ export default async function DetailPage({ params }: DetailPageProps) {
   return (
     <ConfigRequired>
       <AppShell eyebrow={details.label} title={details.title}>
-        <MediaDetailPreview
+        <MediaDetail
           mediaType={mediaType as SearchMediaType}
           tmdbId={numericTmdbId}
         />
