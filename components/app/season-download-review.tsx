@@ -200,7 +200,7 @@ export function SeasonDownloadReview({
         <Button asChild variant="outline" className="rounded-2xl">
           <Link href={`/media/tv/${tmdbId}`}>Back to detail</Link>
         </Button>
-        <div className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+        <div className="max-w-[50vw] text-right text-xs font-medium tracking-[0.18em] break-words text-muted-foreground uppercase">
           {reviewState.detail.title}
         </div>
       </div>
@@ -223,7 +223,7 @@ export function SeasonDownloadReview({
               key={family.key}
               type="button"
               variant={family.key === selectedFamilyKey ? "default" : "outline"}
-              className="rounded-2xl"
+              className="h-auto max-w-full rounded-2xl py-2 text-left leading-5 break-words whitespace-normal"
               onClick={() => {
                 setSelectedFamilyKey(family.key)
                 setSelectedEpisodes(
@@ -295,7 +295,7 @@ export function SeasonDownloadReview({
               </label>
 
               <div className="min-w-0">
-                <p className="text-sm font-medium text-foreground">
+                <p className="text-sm font-medium break-words text-foreground">
                   {episode.title}
                 </p>
                 <p className="mt-2 text-sm break-words text-muted-foreground">
@@ -304,7 +304,7 @@ export function SeasonDownloadReview({
                 {candidates.length > 0 ? (
                   <select
                     value={selectedSourceIds[episode.episodeNumber] ?? ""}
-                    className="mt-3 w-full rounded-2xl border border-border/70 bg-card px-3 py-2 text-sm text-foreground"
+                    className="mt-3 w-full min-w-0 rounded-2xl border border-border/70 bg-card px-3 py-2 text-sm text-foreground"
                     onChange={(event) => {
                       const nextSourceId = event.target.value
 
