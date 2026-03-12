@@ -60,6 +60,7 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
     sources: [],
     message: null,
   })
+  const [selectedSeason, setSelectedSeason] = useState(1)
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -141,6 +142,14 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         <SkeletonCard mediaType={mediaType} tmdbId={tmdbId} />
       )}
 
+      {displayDetail?.mediaType === "tv" && displayDetail.seasonCount ? (
+        <SeasonSelector
+          seasonCount={displayDetail.seasonCount}
+          selectedSeason={selectedSeason}
+          onSelect={setSelectedSeason}
+        />
+      ) : null}
+
       {mediaType === "movie" ? (
         <MovieSourceSection
           tmdbId={tmdbId}
@@ -154,6 +163,39 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
       {state.status === "loading" ? <StatusCard label="Loading" /> : null}
       {state.status === "error" ? <StatusCard label={state.message} /> : null}
     </div>
+  )
+}
+
+function SeasonSelector({
+  seasonCount,
+  selectedSeason,
+  onSelect,
+}: {
+  seasonCount: number
+  selectedSeason: number
+  onSelect: (seasonNumber: number) => void
+}) {
+  return (
+    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
+      <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
+        Seasons
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {Array.from({ length: seasonCount }, (_, index) => index + 1).map(
+          (seasonNumber) => (
+            <Button
+              key={seasonNumber}
+              type="button"
+              variant={seasonNumber === selectedSeason ? "default" : "outline"}
+              className="rounded-2xl"
+              onClick={() => onSelect(seasonNumber)}
+            >
+              Season {seasonNumber}
+            </Button>
+          )
+        )}
+      </div>
+    </section>
   )
 }
 
