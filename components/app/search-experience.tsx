@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
@@ -326,11 +327,12 @@ function SearchResultCard({
     >
       <div className="overflow-hidden rounded-[24px] border border-border/60 bg-[linear-gradient(145deg,rgba(208,237,225,0.42),rgba(243,219,180,0.35))]">
         {posterUrl ? (
-          <img
+          <Image
             src={posterUrl}
             alt={`Poster for ${item.title}`}
             className="aspect-[2/3] h-full w-full object-cover"
-            loading="lazy"
+            width={342}
+            height={513}
           />
         ) : (
           <div className="flex aspect-[2/3] items-end p-4">

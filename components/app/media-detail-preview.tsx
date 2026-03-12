@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import Image from "next/image"
 
 import { useRecentMedia } from "@/hooks/use-recent-media"
 import { getTmdbImageUrl, type SearchMediaType } from "@/lib/tmdb"
@@ -44,10 +45,12 @@ export function MediaDetailPreview({
     <section className="grid gap-6 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur md:grid-cols-[220px_minmax(0,1fr)] md:p-6">
       <div className="overflow-hidden rounded-[26px] border border-border/70 bg-[linear-gradient(145deg,rgba(208,237,225,0.42),rgba(243,219,180,0.35))]">
         {posterUrl ? (
-          <img
+          <Image
             src={posterUrl}
             alt={`Poster for ${item.title}`}
             className="aspect-[2/3] h-full w-full object-cover"
+            width={500}
+            height={750}
           />
         ) : (
           <div className="flex aspect-[2/3] items-end p-4">
