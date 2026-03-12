@@ -228,17 +228,11 @@ export function SearchExperience() {
           </Button>
         </form>
 
-        <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span>Movies and TV are combined in one search.</span>
-          <span className="hidden h-1 w-1 rounded-full bg-border sm:block" />
-          <span>Adult titles are included.</span>
-          {resultLabel ? (
-            <>
-              <span className="hidden h-1 w-1 rounded-full bg-border sm:block" />
-              <span>{resultLabel}</span>
-            </>
-          ) : null}
-        </div>
+        {resultLabel ? (
+          <div className="mt-4 text-sm text-muted-foreground">
+            {resultLabel}
+          </div>
+        ) : null}
       </section>
 
       {!hasActiveSearch ? (
@@ -259,14 +253,9 @@ export function SearchExperience() {
       ) : (
         <section className="grid gap-4">
           <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
-                Search results
-              </p>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Open a title to continue into the media flow.
-              </p>
-            </div>
+            <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
+              Search results
+            </p>
             <div className="rounded-full border border-border/70 bg-background/75 px-3 py-1 text-xs font-medium text-muted-foreground">
               Page {searchState.page} of {searchState.totalPages}
             </div>
@@ -395,14 +384,9 @@ function RecentMediaSection({
 
   return (
     <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/80 p-5 shadow-[0_18px_80px_-42px_rgba(18,38,33,0.38)] sm:p-6">
-      <div>
-        <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
-          Recently opened
-        </p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Pick up where you left off without running another search.
-        </p>
-      </div>
+      <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
+        Recently opened
+      </p>
 
       <div className="grid gap-4 xl:grid-cols-2">
         {items.map((item) => (
@@ -426,10 +410,6 @@ function EmptyPrompt() {
       <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-foreground">
         Start with a movie or TV title.
       </h2>
-      <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-        Search stays explicit: type a query, press Enter or use the button, and
-        browse combined TMDB results.
-      </p>
     </section>
   )
 }

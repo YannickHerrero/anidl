@@ -36,11 +36,7 @@ export default async function DetailPage({ params }: DetailPageProps) {
 
   return (
     <ConfigRequired>
-      <AppShell
-        eyebrow={details.label}
-        title={details.title}
-        description="Use search as the entry point, then keep building richer metadata and download actions from here."
-      >
+      <AppShell eyebrow={details.label} title={details.title}>
         <MediaDetailPreview
           mediaType={mediaType as SearchMediaType}
           tmdbId={numericTmdbId}

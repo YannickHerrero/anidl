@@ -5,11 +5,7 @@ import { SearchExperience } from "@/components/app/search-experience"
 export default function SearchPage() {
   return (
     <ConfigRequired>
-      <AppShell
-        eyebrow="Search"
-        title="Search"
-        description="Search TMDB for movies and TV shows, then continue straight into the media flow."
-      >
+      <AppShell eyebrow="Search" title="Search">
         <SearchExperience />
       </AppShell>
     </ConfigRequired>

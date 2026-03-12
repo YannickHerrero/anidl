@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 type AppShellProps = {
   eyebrow: string
   title: string
-  description: string
+  description?: string
   children: ReactNode
 }
 
@@ -27,11 +27,13 @@ export function AppShell({
               </h1>
             </div>
 
-            <div className="rounded-[26px] border border-border/70 bg-background/70 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.35)] backdrop-blur">
-              <p className="text-sm leading-6 text-muted-foreground">
-                {description}
-              </p>
-            </div>
+            {description ? (
+              <div className="rounded-[26px] border border-border/70 bg-background/70 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.35)] backdrop-blur">
+                <p className="text-sm leading-6 text-muted-foreground">
+                  {description}
+                </p>
+              </div>
+            ) : null}
           </section>
 
           {children}
