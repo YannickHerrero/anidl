@@ -1,19 +1,31 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState,
+} from "react"
 import Image from "next/image"
 import Link from "next/link"
 
+import { SourceResultsPanel } from "@/components/app/source-results-panel"
 import { Button } from "@/components/ui/button"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useRecentMedia } from "@/hooks/use-recent-media"
 import {
+  fetchTmdbExternalIds,
   fetchTmdbMediaDetail,
   getTmdbImageUrl,
   mediaDetailToSearchItem,
   type MediaDetail,
   type SearchMediaType,
 } from "@/lib/tmdb"
+import {
+  fetchTorrentioMovieSources,
+  type TorrentioSource,
+} from "@/lib/torrentio"
 
 type MediaDetailProps = Readonly<{
   mediaType: SearchMediaType
@@ -24,6 +36,12 @@ type DetailState =
   | { status: "loading"; detail: MediaDetail | null }
   | { status: "success"; detail: MediaDetail }
   | { status: "error"; detail: MediaDetail | null; message: string }
+
+type SourceState = {
+  status: "idle" | "loading" | "success" | "error"
+  sources: TorrentioSource[]
+  message: string | null
+}
 
 export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
   const { config } = useAppConfig()
@@ -36,6 +54,11 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
   const [state, setState] = useState<DetailState>({
     status: "loading",
     detail: null,
+  })
+  const [sourceState, setSourceState] = useState<SourceState>({
+    status: mediaType === "movie" ? "loading" : "idle",
+    sources: [],
+    message: null,
   })
 
   useEffect(() => {
@@ -118,9 +141,91 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         <SkeletonCard mediaType={mediaType} tmdbId={tmdbId} />
       )}
 
+      {mediaType === "movie" ? (
+        <MovieSourceSection
+          tmdbId={tmdbId}
+          tmdbApiKey={config.tmdbApiKey}
+          realDebridApiKey={config.realDebridApiKey}
+          state={sourceState}
+          onStateChange={setSourceState}
+        />
+      ) : null}
+
       {state.status === "loading" ? <StatusCard label="Loading" /> : null}
       {state.status === "error" ? <StatusCard label={state.message} /> : null}
     </div>
+  )
+}
+
+function MovieSourceSection({
+  tmdbId,
+  tmdbApiKey,
+  realDebridApiKey,
+  state,
+  onStateChange,
+}: {
+  tmdbId: number
+  tmdbApiKey: string
+  realDebridApiKey: string
+  state: SourceState
+  onStateChange: Dispatch<SetStateAction<SourceState>>
+}) {
+  useEffect(() => {
+    const abortController = new AbortController()
+
+    void fetchTmdbExternalIds({
+      apiKey: tmdbApiKey,
+      mediaType: "movie",
+      tmdbId,
+      signal: abortController.signal,
+    })
+      .then((externalIds) => {
+        if (!externalIds.imdbId) {
+          throw new Error("IMDb ID not found")
+        }
+
+        return fetchTorrentioMovieSources({
+          imdbId: externalIds.imdbId,
+          realDebridApiKey,
+          signal: abortController.signal,
+        })
+      })
+      .then((sources) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        onStateChange({
+          status: "success",
+          sources,
+          message: null,
+        })
+      })
+      .catch((error: unknown) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        onStateChange({
+          status: "error",
+          sources: [],
+          message:
+            error instanceof Error ? error.message : "Could not load sources",
+        })
+      })
+
+    return () => {
+      abortController.abort()
+    }
+  }, [onStateChange, realDebridApiKey, tmdbApiKey, tmdbId])
+
+  return (
+    <SourceResultsPanel
+      title="Sources"
+      status={state.status}
+      sources={state.sources}
+      message={state.message}
+    />
   )
 }
 
