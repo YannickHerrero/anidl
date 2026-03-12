@@ -160,8 +160,7 @@ export function getEpisodeSourceWarnings({
 }
 
 export function getSourceFamilyKey(title: string) {
-  const beforeEpisodeMarker =
-    title.split(/s\d{1,2}e\d{1,3}|e\d{1,3}/i)[0] ?? title
+  const beforeEpisodeMarker = extractFamilyStem(title)
 
   return beforeEpisodeMarker
     .replace(/\[[^\]]*\]/g, " ")
@@ -172,10 +171,31 @@ export function getSourceFamilyKey(title: string) {
 }
 
 export function getSourceFamilyLabel(title: string) {
-  const beforeEpisodeMarker =
-    title.split(/s\d{1,2}e\d{1,3}|e\d{1,3}/i)[0] ?? title
+  const beforeEpisodeMarker = extractFamilyStem(title)
 
-  return beforeEpisodeMarker.replace(/\s+/g, " ").trim()
+  return beforeEpisodeMarker
+    .replace(/[_-]{2,}/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function extractFamilyStem(title: string) {
+  const withoutExtension = title.replace(/\.[a-z0-9]{2,4}$/i, "")
+  const patterns = [
+    /^(.*?)(?:s\d{1,2}[\s._-]*e\d{1,3})\b/i,
+    /^(.*?)(?:\be\d{1,3}\b)/i,
+    /^(.*?)(?:[_ .-]{1,4}\d{1,3}(?=[_ .-]*[\[(]))/i,
+  ]
+
+  for (const pattern of patterns) {
+    const match = withoutExtension.match(pattern)
+
+    if (match?.[1]?.trim()) {
+      return match[1].trim()
+    }
+  }
+
+  return withoutExtension
 }
 
 function getMostCommonValue(values: string[]) {
