@@ -13,9 +13,9 @@ export async function validateRealDebridApiKey({
   apiKey: string
   signal?: AbortSignal
 }): Promise<RealDebridUser> {
-  const response = await fetch("https://api.real-debrid.com/rest/1.0/user", {
+  const response = await fetch("/api/real-debrid/user", {
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      "x-real-debrid-api-key": apiKey,
     },
     signal,
   })

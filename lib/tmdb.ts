@@ -185,7 +185,6 @@ type FetchTmdbTvSeasonDetailOptions = {
   signal?: AbortSignal
 }
 
-const TMDB_BASE_URL = "https://api.themoviedb.org/3"
 const TMDB_IMAGE_BASE_URL = "https://image.tmdb.org/t/p"
 
 export function getTmdbImageUrl(path: string | null, size = "w342") {
@@ -202,13 +201,12 @@ export async function fetchTmdbExternalIds({
   tmdbId,
   signal,
 }: FetchTmdbExternalIdsOptions): Promise<MediaExternalIds> {
-  const params = new URLSearchParams({
-    api_key: apiKey,
-  })
-
   const response = await fetch(
-    `${TMDB_BASE_URL}/${mediaType}/${tmdbId}/external_ids?${params}`,
+    `/api/tmdb/${mediaType}/${tmdbId}/external_ids`,
     {
+      headers: {
+        "x-tmdb-api-key": apiKey,
+      },
       signal,
     }
   )
@@ -230,13 +228,12 @@ export async function fetchTmdbTvSeasonDetail({
   seasonNumber,
   signal,
 }: FetchTmdbTvSeasonDetailOptions): Promise<TvSeasonDetail> {
-  const params = new URLSearchParams({
-    api_key: apiKey,
-  })
-
   const response = await fetch(
-    `${TMDB_BASE_URL}/tv/${tmdbId}/season/${seasonNumber}?${params}`,
+    `/api/tmdb/tv/${tmdbId}/season/${seasonNumber}`,
     {
+      headers: {
+        "x-tmdb-api-key": apiKey,
+      },
       signal,
     }
   )
@@ -280,13 +277,15 @@ export async function searchTmdbMedia({
   }
 
   const params = new URLSearchParams({
-    api_key: apiKey,
     query: trimmedQuery,
     page: String(page),
     include_adult: String(includeAdult),
   })
 
-  const response = await fetch(`${TMDB_BASE_URL}/search/multi?${params}`, {
+  const response = await fetch(`/api/tmdb/search/multi?${params}`, {
+    headers: {
+      "x-tmdb-api-key": apiKey,
+    },
     signal,
   })
 
@@ -310,16 +309,12 @@ export async function fetchTmdbMediaDetail({
   tmdbId,
   signal,
 }: FetchTmdbMediaDetailOptions): Promise<MediaDetail> {
-  const params = new URLSearchParams({
-    api_key: apiKey,
+  const response = await fetch(`/api/tmdb/${mediaType}/${tmdbId}`, {
+    headers: {
+      "x-tmdb-api-key": apiKey,
+    },
+    signal,
   })
-
-  const response = await fetch(
-    `${TMDB_BASE_URL}/${mediaType}/${tmdbId}?${params}`,
-    {
-      signal,
-    }
-  )
 
   if (!response.ok) {
     throw new Error(`TMDB detail failed with status ${response.status}`)

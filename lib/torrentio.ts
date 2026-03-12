@@ -1,18 +1,5 @@
 import { type SearchMediaType } from "@/lib/tmdb"
 
-const TORRENTIO_BASE_URL = "https://torrentio.strem.fun"
-
-const DEFAULT_TORRENTIO_PROVIDERS = [
-  "yts",
-  "eztv",
-  "rarbg",
-  "1337x",
-  "thepiratebay",
-  "kickasstorrents",
-  "torrentgalaxy",
-  "nyaasi",
-] as const
-
 type TorrentioStreamResponse = {
   name: string
   title: string
@@ -106,13 +93,12 @@ async function fetchTorrentioSources({
   mediaType: SearchMediaType
   signal?: AbortSignal
 }) {
-  const config = buildTorrentioConfig(realDebridApiKey)
-  const response = await fetch(
-    `${TORRENTIO_BASE_URL}/${config}/stream/${path}.json`,
-    {
-      signal,
-    }
-  )
+  const response = await fetch(`/api/torrentio/${path.replace(/:/g, "/")}`, {
+    headers: {
+      "x-real-debrid-api-key": realDebridApiKey,
+    },
+    signal,
+  })
 
   if (!response.ok) {
     throw new Error(`Torrentio request failed with status ${response.status}`)
@@ -125,18 +111,6 @@ async function fetchTorrentioSources({
       normalizeTorrentioSource(source, index, mediaType)
     )
   )
-}
-
-function buildTorrentioConfig(realDebridApiKey: string) {
-  const configParts = [
-    `providers=${DEFAULT_TORRENTIO_PROVIDERS.join(",")}`,
-    "sort=qualitysize",
-    "qualityfilter=scr,cam",
-    "debridoptions=nodownloadlinks",
-    `realdebrid=${realDebridApiKey}`,
-  ]
-
-  return configParts.join("|")
 }
 
 function normalizeTorrentioSource(
