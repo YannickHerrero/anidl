@@ -2,6 +2,8 @@ import { notFound } from "next/navigation"
 
 import { AppShell } from "@/components/app/app-shell"
 import { ConfigRequired } from "@/components/app/config-required"
+import { MediaDetailPreview } from "@/components/app/media-detail-preview"
+import { type SearchMediaType } from "@/lib/tmdb"
 
 type DetailPageProps = {
   params: Promise<{
@@ -26,8 +28,9 @@ const mediaCopy = {
 export default async function DetailPage({ params }: DetailPageProps) {
   const { mediaType, tmdbId } = await params
   const details = mediaCopy[mediaType as keyof typeof mediaCopy]
+  const numericTmdbId = Number(tmdbId)
 
-  if (!details) {
+  if (!details || !Number.isInteger(numericTmdbId) || numericTmdbId <= 0) {
     notFound()
   }
 
@@ -36,17 +39,12 @@ export default async function DetailPage({ params }: DetailPageProps) {
       <AppShell
         eyebrow={details.label}
         title={details.title}
-        description={details.description}
+        description="Use search as the entry point, then keep building richer metadata and download actions from here."
       >
-        <section className="rounded-[28px] border border-border/70 bg-card/80 p-6 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur">
-          <div className="flex flex-wrap gap-2 text-xs tracking-[0.18em] text-muted-foreground uppercase">
-            <span>TMDB {tmdbId}</span>
-            <span>{mediaType === "movie" ? "Movie" : "TV show"}</span>
-          </div>
-          <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            Details and download actions are not available yet.
-          </p>
-        </section>
+        <MediaDetailPreview
+          mediaType={mediaType as SearchMediaType}
+          tmdbId={numericTmdbId}
+        />
       </AppShell>
     </ConfigRequired>
   )

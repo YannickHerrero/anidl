@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAppConfig } from "@/hooks/use-app-config"
+import { useRecentMedia } from "@/hooks/use-recent-media"
 import {
   getTmdbImageUrl,
   searchTmdbMedia,
@@ -40,6 +41,7 @@ export function SearchExperience() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { config } = useAppConfig()
+  const { addItem, items: recentItems } = useRecentMedia()
   const requestIdRef = useRef(0)
   const queryFromUrl = searchParams.get("q")?.trim() ?? ""
   const [inputValue, setInputValue] = useState(queryFromUrl)
@@ -239,7 +241,10 @@ export function SearchExperience() {
       </section>
 
       {!hasActiveSearch ? (
-        <EmptyPrompt />
+        <div className="grid gap-6">
+          <EmptyPrompt />
+          <RecentMediaSection items={recentItems} onOpen={addItem} />
+        </div>
       ) : isInitialLoading ? (
         <LoadingState query={queryFromUrl} />
       ) : searchState.status === "error" && searchState.items.length === 0 ? (
@@ -271,6 +276,7 @@ export function SearchExperience() {
               <SearchResultCard
                 key={`${item.mediaType}-${item.id}`}
                 item={item}
+                onOpen={addItem}
               />
             ))}
           </div>
@@ -280,6 +286,8 @@ export function SearchExperience() {
               Could not load more results right now. {searchState.errorMessage}
             </div>
           ) : null}
+
+          <RecentMediaSection items={recentItems} onOpen={addItem} />
 
           {hasMoreResults ? (
             <div className="flex justify-center pt-2">
@@ -301,12 +309,19 @@ export function SearchExperience() {
   )
 }
 
-function SearchResultCard({ item }: { item: SearchMediaItem }) {
+function SearchResultCard({
+  item,
+  onOpen,
+}: {
+  item: SearchMediaItem
+  onOpen?: (item: SearchMediaItem) => void
+}) {
   const posterUrl = getTmdbImageUrl(item.posterPath)
 
   return (
     <Link
       href={`/media/${item.mediaType}/${item.id}`}
+      onClick={() => onOpen?.(item)}
       className="group grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-4 shadow-[0_18px_80px_-42px_rgba(18,38,33,0.42)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-card sm:grid-cols-[112px_minmax(0,1fr)] sm:p-5"
     >
       <div className="overflow-hidden rounded-[24px] border border-border/60 bg-[linear-gradient(145deg,rgba(208,237,225,0.42),rgba(243,219,180,0.35))]">
@@ -362,6 +377,41 @@ function SearchResultCard({ item }: { item: SearchMediaItem }) {
         </div>
       </article>
     </Link>
+  )
+}
+
+function RecentMediaSection({
+  items,
+  onOpen,
+}: {
+  items: SearchMediaItem[]
+  onOpen: (item: SearchMediaItem) => void
+}) {
+  if (items.length === 0) {
+    return null
+  }
+
+  return (
+    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/80 p-5 shadow-[0_18px_80px_-42px_rgba(18,38,33,0.38)] sm:p-6">
+      <div>
+        <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
+          Recently opened
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Pick up where you left off without running another search.
+        </p>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-2">
+        {items.map((item) => (
+          <SearchResultCard
+            key={`recent-${item.mediaType}-${item.id}`}
+            item={item}
+            onOpen={onOpen}
+          />
+        ))}
+      </div>
+    </section>
   )
 }
 
