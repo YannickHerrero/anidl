@@ -15,6 +15,10 @@ import { Button } from "@/components/ui/button"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useRecentMedia } from "@/hooks/use-recent-media"
 import {
+  validateRealDebridApiKey,
+  type RealDebridUser,
+} from "@/lib/real-debrid"
+import {
   fetchTmdbExternalIds,
   fetchTmdbMediaDetail,
   fetchTmdbTvSeasonDetail,
@@ -53,6 +57,11 @@ type SeasonState = {
   message: string | null
 }
 
+type RealDebridState =
+  | { status: "loading" }
+  | { status: "success"; user: RealDebridUser }
+  | { status: "error"; message: string }
+
 export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
   const { config } = useAppConfig()
   const { addItem, items } = useRecentMedia()
@@ -77,6 +86,45 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
     season: null,
     message: null,
   })
+  const [realDebridState, setRealDebridState] = useState<RealDebridState>({
+    status: "loading",
+  })
+
+  useEffect(() => {
+    const abortController = new AbortController()
+
+    void validateRealDebridApiKey({
+      apiKey: config.realDebridApiKey,
+      signal: abortController.signal,
+    })
+      .then((user) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        setRealDebridState({
+          status: "success",
+          user,
+        })
+      })
+      .catch((error: unknown) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        setRealDebridState({
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not validate Real-Debrid",
+        })
+      })
+
+    return () => {
+      abortController.abort()
+    }
+  }, [config.realDebridApiKey])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -181,6 +229,7 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
 
       {mediaType === "tv" ? (
         <TvEpisodeSection
+          realDebridState={realDebridState}
           tmdbId={tmdbId}
           tmdbApiKey={config.tmdbApiKey}
           realDebridApiKey={config.realDebridApiKey}
@@ -195,13 +244,26 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
       ) : null}
 
       {mediaType === "movie" ? (
-        <MovieSourceSection
-          tmdbId={tmdbId}
-          tmdbApiKey={config.tmdbApiKey}
-          realDebridApiKey={config.realDebridApiKey}
-          state={sourceState}
-          onStateChange={setSourceState}
-        />
+        realDebridState.status === "success" ? (
+          <MovieSourceSection
+            tmdbId={tmdbId}
+            tmdbApiKey={config.tmdbApiKey}
+            realDebridApiKey={config.realDebridApiKey}
+            state={sourceState}
+            onStateChange={setSourceState}
+          />
+        ) : (
+          <SourceResultsPanel
+            title="Sources"
+            status={realDebridState.status === "loading" ? "loading" : "error"}
+            sources={[]}
+            message={
+              realDebridState.status === "error"
+                ? realDebridState.message
+                : null
+            }
+          />
+        )
       ) : null}
 
       {state.status === "loading" ? <StatusCard label="Loading" /> : null}
@@ -244,6 +306,7 @@ function SeasonSelector({
 }
 
 function TvEpisodeSection({
+  realDebridState,
   tmdbId,
   tmdbApiKey,
   realDebridApiKey,
@@ -255,6 +318,7 @@ function TvEpisodeSection({
   onSelectedEpisodeChange,
   onSourceStateChange,
 }: {
+  realDebridState: RealDebridState
   tmdbId: number
   tmdbApiKey: string
   realDebridApiKey: string
@@ -328,6 +392,10 @@ function TvEpisodeSection({
   ])
 
   useEffect(() => {
+    if (realDebridState.status !== "success" || selectedEpisode === null) {
+      return
+    }
+
     if (selectedEpisode === null) {
       return
     }
@@ -382,6 +450,7 @@ function TvEpisodeSection({
     }
   }, [
     onSourceStateChange,
+    realDebridState.status,
     realDebridApiKey,
     selectedEpisode,
     selectedSeason,
@@ -405,9 +474,19 @@ function TvEpisodeSection({
       />
       <SourceResultsPanel
         title="Sources"
-        status={sourceState.status}
+        status={
+          realDebridState.status === "success"
+            ? sourceState.status
+            : realDebridState.status === "loading"
+              ? "loading"
+              : "error"
+        }
         sources={sourceState.sources}
-        message={sourceState.message}
+        message={
+          realDebridState.status === "error"
+            ? realDebridState.message
+            : sourceState.message
+        }
       />
     </>
   )
