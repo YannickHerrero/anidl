@@ -1,0 +1,317 @@
+"use client"
+
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+
+import { Button } from "@/components/ui/button"
+import { useAppConfig } from "@/hooks/use-app-config"
+import { validateRealDebridApiKey } from "@/lib/real-debrid"
+import {
+  buildFamilyBaseline,
+  getEpisodeSourceWarnings,
+  rankSourceFamilies,
+  selectBestFamilyCandidate,
+  type EpisodeSourceSet,
+} from "@/lib/season-download"
+import {
+  fetchTmdbExternalIds,
+  fetchTmdbMediaDetail,
+  fetchTmdbTvSeasonDetail,
+  type MediaDetail,
+  type TvSeasonDetail,
+} from "@/lib/tmdb"
+import { fetchTorrentioEpisodeSources } from "@/lib/torrentio"
+
+type SeasonDownloadReviewProps = Readonly<{
+  tmdbId: number
+  seasonNumber: number
+}>
+
+type ReviewState = {
+  status: "loading" | "success" | "error"
+  message: string | null
+  detail: MediaDetail | null
+  season: TvSeasonDetail | null
+  episodeSourceSets: EpisodeSourceSet[]
+}
+
+export function SeasonDownloadReview({
+  tmdbId,
+  seasonNumber,
+}: SeasonDownloadReviewProps) {
+  const { config } = useAppConfig()
+  const [reviewState, setReviewState] = useState<ReviewState>({
+    status: "loading",
+    message: null,
+    detail: null,
+    season: null,
+    episodeSourceSets: [],
+  })
+  const [selectedFamilyKey, setSelectedFamilyKey] = useState<string | null>(
+    null
+  )
+  const [selectedEpisodes, setSelectedEpisodes] = useState<
+    Record<number, boolean>
+  >({})
+
+  useEffect(() => {
+    const abortController = new AbortController()
+
+    void validateRealDebridApiKey({
+      apiKey: config.realDebridApiKey,
+      signal: abortController.signal,
+    })
+      .then(() =>
+        Promise.all([
+          fetchTmdbMediaDetail({
+            apiKey: config.tmdbApiKey,
+            mediaType: "tv",
+            tmdbId,
+            signal: abortController.signal,
+          }),
+          fetchTmdbTvSeasonDetail({
+            apiKey: config.tmdbApiKey,
+            tmdbId,
+            seasonNumber,
+            signal: abortController.signal,
+          }),
+          fetchTmdbExternalIds({
+            apiKey: config.tmdbApiKey,
+            mediaType: "tv",
+            tmdbId,
+            signal: abortController.signal,
+          }),
+        ])
+      )
+      .then(async ([detail, season, externalIds]) => {
+        if (!externalIds.imdbId) {
+          throw new Error("IMDb ID not found")
+        }
+
+        const episodeSourceSets = await Promise.all(
+          season.episodes.map(async (episode) => ({
+            episode,
+            candidates: (
+              await fetchTorrentioEpisodeSources({
+                imdbId: externalIds.imdbId!,
+                seasonNumber,
+                episodeNumber: episode.episodeNumber,
+                realDebridApiKey: config.realDebridApiKey,
+                signal: abortController.signal,
+              })
+            ).slice(0, 5),
+          }))
+        )
+
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        const nextFamilies = rankSourceFamilies(episodeSourceSets)
+        const nextFamilyKey = nextFamilies[0]?.key ?? null
+
+        setSelectedFamilyKey(nextFamilyKey)
+        setSelectedEpisodes(
+          Object.fromEntries(
+            episodeSourceSets.map(({ episode, candidates }) => [
+              episode.episodeNumber,
+              nextFamilyKey
+                ? selectBestFamilyCandidate(nextFamilyKey, candidates) !== null
+                : false,
+            ])
+          )
+        )
+
+        setReviewState({
+          status: "success",
+          message: null,
+          detail,
+          season,
+          episodeSourceSets,
+        })
+      })
+      .catch((error: unknown) => {
+        if (abortController.signal.aborted) {
+          return
+        }
+
+        setReviewState({
+          status: "error",
+          message:
+            error instanceof Error
+              ? error.message
+              : "Could not load season review",
+          detail: null,
+          season: null,
+          episodeSourceSets: [],
+        })
+      })
+
+    return () => {
+      abortController.abort()
+    }
+  }, [config.realDebridApiKey, config.tmdbApiKey, seasonNumber, tmdbId])
+
+  const families = useMemo(
+    () => rankSourceFamilies(reviewState.episodeSourceSets),
+    [reviewState.episodeSourceSets]
+  )
+
+  const selectedFamily =
+    families.find((family) => family.key === selectedFamilyKey) ?? null
+  const selectedCandidates = reviewState.episodeSourceSets.map(
+    ({ candidates }) =>
+      selectedFamilyKey
+        ? selectBestFamilyCandidate(selectedFamilyKey, candidates)
+        : null
+  )
+  const baseline = buildFamilyBaseline(selectedCandidates)
+
+  if (reviewState.status === "loading") {
+    return <InfoCard label="Loading" />
+  }
+
+  if (reviewState.status === "error") {
+    return (
+      <InfoCard label={reviewState.message ?? "Could not load season review"} />
+    )
+  }
+
+  if (!reviewState.detail || !reviewState.season) {
+    return <InfoCard label="Season review is unavailable" />
+  }
+
+  return (
+    <div className="grid gap-6">
+      <div className="flex items-center justify-between gap-3">
+        <Button asChild variant="outline" className="rounded-2xl">
+          <Link href={`/media/tv/${tmdbId}`}>Back to detail</Link>
+        </Button>
+        <div className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
+          {reviewState.detail.title}
+        </div>
+      </div>
+
+      <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
+            Release families
+          </p>
+          {selectedFamily ? (
+            <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
+              {selectedFamily.coverageCount}/
+              {reviewState.season.episodes.length}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {families.map((family) => (
+            <Button
+              key={family.key}
+              type="button"
+              variant={family.key === selectedFamilyKey ? "default" : "outline"}
+              className="rounded-2xl"
+              onClick={() => setSelectedFamilyKey(family.key)}
+            >
+              {family.label || "Unnamed family"}
+            </Button>
+          ))}
+        </div>
+      </section>
+
+      <section className="grid gap-3 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
+        {reviewState.episodeSourceSets.map(({ episode, candidates }) => {
+          const selectedSource = selectedFamilyKey
+            ? selectBestFamilyCandidate(selectedFamilyKey, candidates)
+            : null
+          const warnings = getEpisodeSourceWarnings({
+            candidate: selectedSource,
+            selectedFamilyKey: selectedFamilyKey ?? "",
+            baseline,
+          })
+
+          return (
+            <article
+              key={episode.id}
+              className="grid gap-4 rounded-[24px] border border-border/70 bg-background/70 p-4 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center"
+            >
+              <label className="flex items-center gap-3 text-sm font-medium text-foreground">
+                <input
+                  type="checkbox"
+                  checked={selectedEpisodes[episode.episodeNumber] ?? false}
+                  disabled={!selectedSource}
+                  onChange={(event) =>
+                    setSelectedEpisodes((current) => ({
+                      ...current,
+                      [episode.episodeNumber]: event.target.checked,
+                    }))
+                  }
+                />
+                <span>Episode {episode.episodeNumber}</span>
+              </label>
+
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-foreground">
+                  {episode.title}
+                </p>
+                <p className="mt-2 text-sm break-words text-muted-foreground">
+                  {selectedSource?.title ?? "No family match"}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  {warnings.titleMismatch ? (
+                    <WarningTag label="Title mismatch" />
+                  ) : null}
+                  {warnings.providerMismatch ? (
+                    <WarningTag label="Provider mismatch" />
+                  ) : null}
+                  {warnings.sizeOutlier ? (
+                    <WarningTag label="Size outlier" />
+                  ) : null}
+                  {warnings.codecMismatch ? (
+                    <WarningTag label="Codec mismatch" />
+                  ) : null}
+                  {!selectedSource ? (
+                    <WarningTag label="Missing episode" />
+                  ) : null}
+                </div>
+              </div>
+
+              {selectedSource?.url ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-2xl"
+                  onClick={() =>
+                    window.open(
+                      selectedSource.url ?? "",
+                      "_blank",
+                      "noopener,noreferrer"
+                    )
+                  }
+                >
+                  Download
+                </Button>
+              ) : null}
+            </article>
+          )
+        })}
+      </section>
+    </div>
+  )
+}
+
+function InfoCard({ label }: { label: string }) {
+  return (
+    <section className="rounded-[24px] border border-border/70 bg-card/80 px-4 py-3 text-sm text-muted-foreground shadow-[0_18px_80px_-42px_rgba(18,38,33,0.35)]">
+      {label}
+    </section>
+  )
+}
+
+function WarningTag({ label }: { label: string }) {
+  return (
+    <span className="rounded-full border border-amber-500/25 bg-amber-500/10 px-2.5 py-1 font-medium text-amber-700">
+      {label}
+    </span>
+  )
+}
