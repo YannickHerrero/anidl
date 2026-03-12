@@ -93,11 +93,6 @@ function OnboardingFormFields({
 }: OnboardingFormFieldsProps) {
   const [values, setValues] = useState<AppConfig>(initialConfig)
   const [errors, setErrors] = useState<Errors>({})
-  const [status, setStatus] = useState(
-    isConfigured
-      ? "Saved locally in this browser."
-      : "Add both keys to unlock the rest of the app."
-  )
 
   const isReadyToSave = useMemo(() => {
     return (
@@ -130,13 +125,11 @@ function OnboardingFormFields({
 
     if (Object.keys(nextErrors).length > 0) {
       setErrors(nextErrors)
-      setStatus("Both keys are required before continuing.")
       return
     }
 
     onSave(values)
     setErrors({})
-    setStatus("Saved locally. Sending you to search.")
     onComplete()
   }
 
@@ -205,14 +198,6 @@ function OnboardingFormFields({
               </div>
             )
           })}
-
-          <div className="rounded-[24px] border border-border/70 bg-background/72 p-4">
-            <p className="text-sm font-medium text-foreground">Included</p>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              TMDB powers search and metadata. Real-Debrid powers the download
-              pipeline.
-            </p>
-          </div>
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Button type="submit" size="lg" className="rounded-2xl px-6">
