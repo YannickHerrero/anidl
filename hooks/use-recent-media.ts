@@ -4,6 +4,7 @@ import { useCallback, useSyncExternalStore } from "react"
 
 import {
   addRecentMediaItem,
+  emptyRecentMedia,
   readStoredRecentMedia,
   subscribeToRecentMedia,
   type RecentMediaItem,
@@ -14,7 +15,7 @@ export function useRecentMedia() {
   const items = useSyncExternalStore<RecentMediaItem[]>(
     subscribeToRecentMedia,
     readStoredRecentMedia,
-    () => []
+    () => emptyRecentMedia
   )
 
   const addItem = useCallback((item: SearchMediaItem) => {

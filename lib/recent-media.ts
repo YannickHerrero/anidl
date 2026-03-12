@@ -9,7 +9,9 @@ export type RecentMediaItem = SearchMediaItem & {
   openedAt: string
 }
 
-let cachedItems: RecentMediaItem[] = []
+export const emptyRecentMedia: RecentMediaItem[] = []
+
+let cachedItems: RecentMediaItem[] = emptyRecentMedia
 let cachedSerializedItems = ""
 
 function normalizeRecentMediaItem(
@@ -62,19 +64,19 @@ function normalizeRecentMediaItems(input: unknown): RecentMediaItem[] {
 
 export function readStoredRecentMedia() {
   if (typeof window === "undefined") {
-    return []
+    return emptyRecentMedia
   }
 
   try {
     const raw = window.localStorage.getItem(RECENT_MEDIA_STORAGE_KEY) ?? ""
 
-    if (!raw) {
-      cachedSerializedItems = ""
-      cachedItems = []
+    if (raw === cachedSerializedItems) {
       return cachedItems
     }
 
-    if (raw === cachedSerializedItems) {
+    if (!raw) {
+      cachedSerializedItems = ""
+      cachedItems = emptyRecentMedia
       return cachedItems
     }
 
@@ -83,7 +85,7 @@ export function readStoredRecentMedia() {
     return cachedItems
   } catch {
     cachedSerializedItems = ""
-    cachedItems = []
+    cachedItems = emptyRecentMedia
     return cachedItems
   }
 }
