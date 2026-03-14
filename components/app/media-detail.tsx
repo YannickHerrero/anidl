@@ -39,7 +39,6 @@ import {
   getWatchedEpisodeCount,
   getWatchedSeasonEpisodeCount,
   isEpisodeWatched,
-  type EpisodeRef,
   type MediaWatchProgress,
 } from "@/lib/watch-progress"
 
@@ -73,8 +72,7 @@ type RealDebridState =
 export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
   const { config } = useAppConfig()
   const { addItem, items } = useRecentMedia()
-  const { getItem, markEpisodeWatched, markEpisodesWatched, markMovieWatched } =
-    useWatchProgress()
+  const { getItem, markEpisodeWatched, markMovieWatched } = useWatchProgress()
   const recentItem = useMemo(
     () =>
       items.find((item) => item.mediaType === mediaType && item.id === tmdbId),
@@ -275,7 +273,6 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
           onSelectedEpisodeChange={setSelectedEpisode}
           onSourceStateChange={setSourceState}
           onMarkEpisodeWatched={markEpisodeWatched}
-          onMarkEpisodesWatched={markEpisodesWatched}
         />
       ) : null}
 
@@ -375,7 +372,6 @@ function TvEpisodeSection({
   onSelectedEpisodeChange,
   onSourceStateChange,
   onMarkEpisodeWatched,
-  onMarkEpisodesWatched,
 }: {
   realDebridState: RealDebridState
   tmdbId: number
@@ -395,16 +391,7 @@ function TvEpisodeSection({
     episodeNumber: number,
     watched: boolean
   ) => void
-  onMarkEpisodesWatched: (
-    tmdbId: number,
-    episodes: EpisodeRef[],
-    watched: boolean
-  ) => void
 }) {
-  const [markUntilStatus, setMarkUntilStatus] = useState<
-    "idle" | "loading" | "error"
-  >("idle")
-
   useEffect(() => {
     const abortController = new AbortController()
 
@@ -540,7 +527,6 @@ function TvEpisodeSection({
         seasonState={seasonState}
         selectedEpisode={selectedEpisode}
         watchProgress={watchProgress}
-        markUntilStatus={markUntilStatus}
         onSelect={(episodeNumber) => {
           onSourceStateChange({
             status: "loading",
@@ -551,43 +537,6 @@ function TvEpisodeSection({
         }}
         onToggleWatched={(episodeNumber, watched) => {
           onMarkEpisodeWatched(tmdbId, selectedSeason, episodeNumber, watched)
-        }}
-        onMarkUntilWatched={async (episodeNumber) => {
-          try {
-            setMarkUntilStatus("loading")
-
-            const seasons = await Promise.all(
-              Array.from(
-                { length: selectedSeason },
-                (_, index) => index + 1
-              ).map(async (seasonNumber) =>
-                fetchTmdbTvSeasonDetail({
-                  apiKey: tmdbApiKey,
-                  tmdbId,
-                  seasonNumber,
-                })
-              )
-            )
-
-            const episodesToMark = seasons.flatMap((season) =>
-              season.episodes.flatMap((episode) =>
-                season.seasonNumber < selectedSeason ||
-                episode.episodeNumber <= episodeNumber
-                  ? [
-                      {
-                        seasonNumber: season.seasonNumber,
-                        episodeNumber: episode.episodeNumber,
-                      },
-                    ]
-                  : []
-              )
-            )
-
-            onMarkEpisodesWatched(tmdbId, episodesToMark, true)
-            setMarkUntilStatus("idle")
-          } catch {
-            setMarkUntilStatus("error")
-          }
         }}
       />
       <SourceResultsPanel
@@ -615,19 +564,15 @@ function EpisodeSelector({
   seasonState,
   selectedEpisode,
   watchProgress,
-  markUntilStatus,
   onSelect,
   onToggleWatched,
-  onMarkUntilWatched,
 }: {
   selectedSeason: number
   seasonState: SeasonState
   selectedEpisode: number | null
   watchProgress: MediaWatchProgress | undefined
-  markUntilStatus: "idle" | "loading" | "error"
   onSelect: (episodeNumber: number) => void
   onToggleWatched: (episodeNumber: number, watched: boolean) => void
-  onMarkUntilWatched: (episodeNumber: number) => Promise<void>
 }) {
   return (
     <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
@@ -657,17 +602,11 @@ function EpisodeSelector({
                 selectedSeason,
                 episode.episodeNumber
               )}
-              isMarkingUntil={markUntilStatus === "loading"}
               onSelect={onSelect}
               onToggleWatched={onToggleWatched}
-              onMarkUntilWatched={onMarkUntilWatched}
             />
           ))}
         </div>
-      ) : null}
-
-      {markUntilStatus === "error" ? (
-        <StateCard label="Could not mark previous episodes as watched" />
       ) : null}
     </section>
   )
@@ -678,19 +617,15 @@ function EpisodeCard({
   episode,
   isSelected,
   isWatched,
-  isMarkingUntil,
   onSelect,
   onToggleWatched,
-  onMarkUntilWatched,
 }: {
   seasonNumber: number
   episode: TvEpisodeDetail
   isSelected: boolean
   isWatched: boolean
-  isMarkingUntil: boolean
   onSelect: (episodeNumber: number) => void
   onToggleWatched: (episodeNumber: number, watched: boolean) => void
-  onMarkUntilWatched: (episodeNumber: number) => Promise<void>
 }) {
   return (
     <article
@@ -735,16 +670,6 @@ function EpisodeCard({
           onClick={() => onToggleWatched(episode.episodeNumber, !isWatched)}
         >
           {isWatched ? "Unwatch" : "Mark watched"}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="rounded-2xl"
-          onClick={() => void onMarkUntilWatched(episode.episodeNumber)}
-          disabled={isMarkingUntil}
-        >
-          {isMarkingUntil ? "Updating..." : "Watched until here"}
         </Button>
       </div>
     </article>

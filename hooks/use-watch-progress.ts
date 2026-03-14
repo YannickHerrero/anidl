@@ -8,9 +8,7 @@ import {
   readStoredWatchProgress,
   setMovieWatched,
   setTvEpisodeWatched,
-  setTvEpisodesWatched,
   subscribeToWatchProgress,
-  type EpisodeRef,
   type MediaWatchProgress,
 } from "@/lib/watch-progress"
 import { type SearchMediaType } from "@/lib/tmdb"
@@ -54,19 +52,11 @@ export function useWatchProgress() {
     []
   )
 
-  const markEpisodesWatched = useCallback(
-    (tmdbId: number, episodes: EpisodeRef[], watched: boolean) => {
-      return setTvEpisodesWatched(tmdbId, episodes, watched)
-    },
-    []
-  )
-
   return {
     items,
     getItem,
     refreshItem,
     markMovieWatched,
     markEpisodeWatched,
-    markEpisodesWatched,
   }
 }
