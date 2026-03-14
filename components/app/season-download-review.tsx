@@ -5,6 +5,7 @@ import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
 import { useAppConfig } from "@/hooks/use-app-config"
+import { useWatchProgress } from "@/hooks/use-watch-progress"
 import { validateRealDebridApiKey } from "@/lib/real-debrid"
 import {
   buildFamilyBaseline,
@@ -21,6 +22,10 @@ import {
   type TvSeasonDetail,
 } from "@/lib/tmdb"
 import { fetchTorrentioEpisodeSources } from "@/lib/torrentio"
+import {
+  getWatchedSeasonEpisodeCount,
+  isEpisodeWatched,
+} from "@/lib/watch-progress"
 
 type SeasonDownloadReviewProps = Readonly<{
   tmdbId: number
@@ -40,6 +45,8 @@ export function SeasonDownloadReview({
   seasonNumber,
 }: SeasonDownloadReviewProps) {
   const { config } = useAppConfig()
+  const { getItem, markEpisodeWatched, markEpisodesWatched } =
+    useWatchProgress()
   const [reviewState, setReviewState] = useState<ReviewState>({
     status: "loading",
     message: null,
@@ -56,6 +63,10 @@ export function SeasonDownloadReview({
   const [selectedSourceIds, setSelectedSourceIds] = useState<
     Record<number, string>
   >({})
+  const [markUntilStatus, setMarkUntilStatus] = useState<
+    "idle" | "loading" | "error"
+  >("idle")
+  const watchProgress = getItem("tv", tmdbId)
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -210,6 +221,10 @@ export function SeasonDownloadReview({
           <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
             Release families
           </p>
+          <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-medium text-foreground">
+            {getWatchedSeasonEpisodeCount(watchProgress, seasonNumber)}/
+            {reviewState.season.episodes.length} watched
+          </span>
           {selectedFamily ? (
             <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-medium text-muted-foreground">
               {selectedFamily.coverageCount}/
@@ -268,6 +283,11 @@ export function SeasonDownloadReview({
               (candidate) =>
                 candidate.id === selectedSourceIds[episode.episodeNumber]
             ) ?? null
+          const isWatched = isEpisodeWatched(
+            watchProgress,
+            seasonNumber,
+            episode.episodeNumber
+          )
           const warnings = getEpisodeSourceWarnings({
             candidate: selectedSource,
             selectedFamilyKey: selectedFamilyKey ?? "",
@@ -301,6 +321,17 @@ export function SeasonDownloadReview({
                 <p className="mt-2 text-sm break-words text-muted-foreground">
                   {selectedSource?.title ?? "No family match"}
                 </p>
+                <div className="mt-3 flex flex-wrap gap-2 text-xs">
+                  {isWatched ? (
+                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-700">
+                      Watched
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-border/70 bg-card px-2.5 py-1 font-medium text-muted-foreground">
+                      Unwatched
+                    </span>
+                  )}
+                </div>
                 {candidates.length > 0 ? (
                   <select
                     value={selectedSourceIds[episode.episodeNumber] ?? ""}
@@ -346,26 +377,94 @@ export function SeasonDownloadReview({
                 </div>
               </div>
 
-              {selectedSource?.url ? (
+              <div className="flex flex-wrap justify-end gap-2">
+                {selectedSource?.url ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="rounded-2xl"
+                    onClick={() =>
+                      window.open(
+                        selectedSource.url ?? "",
+                        "_blank",
+                        "noopener,noreferrer"
+                      )
+                    }
+                  >
+                    Download
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
-                  variant="outline"
+                  variant={isWatched ? "secondary" : "outline"}
                   className="rounded-2xl"
                   onClick={() =>
-                    window.open(
-                      selectedSource.url ?? "",
-                      "_blank",
-                      "noopener,noreferrer"
+                    markEpisodeWatched(
+                      tmdbId,
+                      seasonNumber,
+                      episode.episodeNumber,
+                      !isWatched
                     )
                   }
                 >
-                  Download
+                  {isWatched ? "Unwatch" : "Mark watched"}
                 </Button>
-              ) : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="rounded-2xl"
+                  disabled={markUntilStatus === "loading"}
+                  onClick={async () => {
+                    try {
+                      setMarkUntilStatus("loading")
+
+                      const seasons = await Promise.all(
+                        Array.from(
+                          { length: seasonNumber },
+                          (_, index) => index + 1
+                        ).map(async (currentSeasonNumber) =>
+                          fetchTmdbTvSeasonDetail({
+                            apiKey: config.tmdbApiKey,
+                            tmdbId,
+                            seasonNumber: currentSeasonNumber,
+                          })
+                        )
+                      )
+
+                      const episodesToMark = seasons.flatMap((season) =>
+                        season.episodes.flatMap((seasonEpisode) =>
+                          season.seasonNumber < seasonNumber ||
+                          seasonEpisode.episodeNumber <= episode.episodeNumber
+                            ? [
+                                {
+                                  seasonNumber: season.seasonNumber,
+                                  episodeNumber: seasonEpisode.episodeNumber,
+                                },
+                              ]
+                            : []
+                        )
+                      )
+
+                      markEpisodesWatched(tmdbId, episodesToMark, true)
+                      setMarkUntilStatus("idle")
+                    } catch {
+                      setMarkUntilStatus("error")
+                    }
+                  }}
+                >
+                  {markUntilStatus === "loading"
+                    ? "Updating..."
+                    : "Watched until here"}
+                </Button>
+              </div>
             </article>
           )
         })}
       </section>
+
+      {markUntilStatus === "error" ? (
+        <InfoCard label="Could not mark previous episodes as watched" />
+      ) : null}
     </div>
   )
 }

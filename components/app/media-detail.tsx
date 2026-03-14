@@ -14,6 +14,7 @@ import { SourceResultsPanel } from "@/components/app/source-results-panel"
 import { Button } from "@/components/ui/button"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useRecentMedia } from "@/hooks/use-recent-media"
+import { useWatchProgress } from "@/hooks/use-watch-progress"
 import {
   validateRealDebridApiKey,
   type RealDebridUser,
@@ -34,6 +35,13 @@ import {
   fetchTorrentioMovieSources,
   type TorrentioSource,
 } from "@/lib/torrentio"
+import {
+  getWatchedEpisodeCount,
+  getWatchedSeasonEpisodeCount,
+  isEpisodeWatched,
+  type EpisodeRef,
+  type MediaWatchProgress,
+} from "@/lib/watch-progress"
 
 type MediaDetailProps = Readonly<{
   mediaType: SearchMediaType
@@ -65,6 +73,8 @@ type RealDebridState =
 export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
   const { config } = useAppConfig()
   const { addItem, items } = useRecentMedia()
+  const { getItem, markEpisodeWatched, markEpisodesWatched, markMovieWatched } =
+    useWatchProgress()
   const recentItem = useMemo(
     () =>
       items.find((item) => item.mediaType === mediaType && item.id === tmdbId),
@@ -89,6 +99,7 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
   const [realDebridState, setRealDebridState] = useState<RealDebridState>({
     status: "loading",
   })
+  const watchProgress = getItem(mediaType, tmdbId)
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -206,10 +217,31 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         <SkeletonCard mediaType={mediaType} tmdbId={tmdbId} />
       )}
 
+      {displayDetail?.mediaType === "movie" ? (
+        <MovieTrackingSection
+          isWatched={watchProgress?.mediaType === "movie"}
+          onSetWatched={(watched) => markMovieWatched(tmdbId, watched)}
+        />
+      ) : null}
+
+      {displayDetail?.mediaType === "tv" ? (
+        <TvTrackingSummary
+          totalEpisodeCount={displayDetail.episodeCount}
+          watchedEpisodeCount={getWatchedEpisodeCount(watchProgress)}
+        />
+      ) : null}
+
       {displayDetail?.mediaType === "tv" && displayDetail.seasonCount ? (
         <SeasonSelector
           tmdbId={tmdbId}
           seasonCount={displayDetail.seasonCount}
+          watchedEpisodeCount={getWatchedSeasonEpisodeCount(
+            watchProgress,
+            selectedSeason
+          )}
+          currentSeasonEpisodeCount={
+            seasonState.season?.episodes.length ?? null
+          }
           selectedSeason={selectedSeason}
           onSelect={(seasonNumber) => {
             setSeasonState({
@@ -238,9 +270,12 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
           selectedEpisode={selectedEpisode}
           seasonState={seasonState}
           sourceState={sourceState}
+          watchProgress={watchProgress}
           onSeasonStateChange={setSeasonState}
           onSelectedEpisodeChange={setSelectedEpisode}
           onSourceStateChange={setSourceState}
+          onMarkEpisodeWatched={markEpisodeWatched}
+          onMarkEpisodesWatched={markEpisodesWatched}
         />
       ) : null}
 
@@ -276,11 +311,15 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
 function SeasonSelector({
   tmdbId,
   seasonCount,
+  watchedEpisodeCount,
+  currentSeasonEpisodeCount,
   selectedSeason,
   onSelect,
 }: {
   tmdbId: number
   seasonCount: number
+  watchedEpisodeCount: number
+  currentSeasonEpisodeCount: number | null
   selectedSeason: number
   onSelect: (seasonNumber: number) => void
 }) {
@@ -289,6 +328,13 @@ function SeasonSelector({
       <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
         Seasons
       </p>
+      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+        <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 font-medium text-foreground">
+          {currentSeasonEpisodeCount
+            ? `${watchedEpisodeCount}/${currentSeasonEpisodeCount} watched`
+            : `${watchedEpisodeCount} watched`}
+        </span>
+      </div>
       <div className="flex flex-wrap gap-2">
         {Array.from({ length: seasonCount }, (_, index) => index + 1).map(
           (seasonNumber) => (
@@ -324,9 +370,12 @@ function TvEpisodeSection({
   selectedEpisode,
   seasonState,
   sourceState,
+  watchProgress,
   onSeasonStateChange,
   onSelectedEpisodeChange,
   onSourceStateChange,
+  onMarkEpisodeWatched,
+  onMarkEpisodesWatched,
 }: {
   realDebridState: RealDebridState
   tmdbId: number
@@ -336,10 +385,26 @@ function TvEpisodeSection({
   selectedEpisode: number | null
   seasonState: SeasonState
   sourceState: SourceState
+  watchProgress: MediaWatchProgress | undefined
   onSeasonStateChange: Dispatch<SetStateAction<SeasonState>>
   onSelectedEpisodeChange: Dispatch<SetStateAction<number | null>>
   onSourceStateChange: Dispatch<SetStateAction<SourceState>>
+  onMarkEpisodeWatched: (
+    tmdbId: number,
+    seasonNumber: number,
+    episodeNumber: number,
+    watched: boolean
+  ) => void
+  onMarkEpisodesWatched: (
+    tmdbId: number,
+    episodes: EpisodeRef[],
+    watched: boolean
+  ) => void
 }) {
+  const [markUntilStatus, setMarkUntilStatus] = useState<
+    "idle" | "loading" | "error"
+  >("idle")
+
   useEffect(() => {
     const abortController = new AbortController()
 
@@ -471,8 +536,11 @@ function TvEpisodeSection({
   return (
     <>
       <EpisodeSelector
+        selectedSeason={selectedSeason}
         seasonState={seasonState}
         selectedEpisode={selectedEpisode}
+        watchProgress={watchProgress}
+        markUntilStatus={markUntilStatus}
         onSelect={(episodeNumber) => {
           onSourceStateChange({
             status: "loading",
@@ -480,6 +548,46 @@ function TvEpisodeSection({
             message: null,
           })
           onSelectedEpisodeChange(episodeNumber)
+        }}
+        onToggleWatched={(episodeNumber, watched) => {
+          onMarkEpisodeWatched(tmdbId, selectedSeason, episodeNumber, watched)
+        }}
+        onMarkUntilWatched={async (episodeNumber) => {
+          try {
+            setMarkUntilStatus("loading")
+
+            const seasons = await Promise.all(
+              Array.from(
+                { length: selectedSeason },
+                (_, index) => index + 1
+              ).map(async (seasonNumber) =>
+                fetchTmdbTvSeasonDetail({
+                  apiKey: tmdbApiKey,
+                  tmdbId,
+                  seasonNumber,
+                })
+              )
+            )
+
+            const episodesToMark = seasons.flatMap((season) =>
+              season.episodes.flatMap((episode) =>
+                season.seasonNumber < selectedSeason ||
+                episode.episodeNumber <= episodeNumber
+                  ? [
+                      {
+                        seasonNumber: season.seasonNumber,
+                        episodeNumber: episode.episodeNumber,
+                      },
+                    ]
+                  : []
+              )
+            )
+
+            onMarkEpisodesWatched(tmdbId, episodesToMark, true)
+            setMarkUntilStatus("idle")
+          } catch {
+            setMarkUntilStatus("error")
+          }
         }}
       />
       <SourceResultsPanel
@@ -503,13 +611,23 @@ function TvEpisodeSection({
 }
 
 function EpisodeSelector({
+  selectedSeason,
   seasonState,
   selectedEpisode,
+  watchProgress,
+  markUntilStatus,
   onSelect,
+  onToggleWatched,
+  onMarkUntilWatched,
 }: {
+  selectedSeason: number
   seasonState: SeasonState
   selectedEpisode: number | null
+  watchProgress: MediaWatchProgress | undefined
+  markUntilStatus: "idle" | "loading" | "error"
   onSelect: (episodeNumber: number) => void
+  onToggleWatched: (episodeNumber: number, watched: boolean) => void
+  onMarkUntilWatched: (episodeNumber: number) => Promise<void>
 }) {
   return (
     <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
@@ -531,39 +649,66 @@ function EpisodeSelector({
           {seasonState.season.episodes.map((episode) => (
             <EpisodeCard
               key={episode.id}
+              seasonNumber={selectedSeason}
               episode={episode}
               isSelected={episode.episodeNumber === selectedEpisode}
+              isWatched={isEpisodeWatched(
+                watchProgress,
+                selectedSeason,
+                episode.episodeNumber
+              )}
+              isMarkingUntil={markUntilStatus === "loading"}
               onSelect={onSelect}
+              onToggleWatched={onToggleWatched}
+              onMarkUntilWatched={onMarkUntilWatched}
             />
           ))}
         </div>
+      ) : null}
+
+      {markUntilStatus === "error" ? (
+        <StateCard label="Could not mark previous episodes as watched" />
       ) : null}
     </section>
   )
 }
 
 function EpisodeCard({
+  seasonNumber,
   episode,
   isSelected,
+  isWatched,
+  isMarkingUntil,
   onSelect,
+  onToggleWatched,
+  onMarkUntilWatched,
 }: {
+  seasonNumber: number
   episode: TvEpisodeDetail
   isSelected: boolean
+  isWatched: boolean
+  isMarkingUntil: boolean
   onSelect: (episodeNumber: number) => void
+  onToggleWatched: (episodeNumber: number, watched: boolean) => void
+  onMarkUntilWatched: (episodeNumber: number) => Promise<void>
 }) {
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(episode.episodeNumber)}
+    <article
       className={`grid gap-3 rounded-[24px] border p-4 text-left transition-colors ${
         isSelected
           ? "border-primary/40 bg-primary/10"
           : "border-border/70 bg-background/70 hover:border-primary/30"
       }`}
     >
-      <div className="flex flex-wrap gap-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
+      <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
         <span>Episode {episode.episodeNumber}</span>
+        <span>Season {seasonNumber}</span>
         {episode.airDate ? <span>{formatDate(episode.airDate)}</span> : null}
+        {isWatched ? (
+          <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-emerald-700">
+            Watched
+          </span>
+        ) : null}
       </div>
       <p className="text-sm font-medium text-foreground">{episode.title}</p>
       <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -572,7 +717,37 @@ function EpisodeCard({
           <FactTag value={`${episode.voteAverage.toFixed(1)} / 10`} />
         ) : null}
       </div>
-    </button>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          type="button"
+          variant={isSelected ? "default" : "outline"}
+          size="sm"
+          className="rounded-2xl"
+          onClick={() => onSelect(episode.episodeNumber)}
+        >
+          {isSelected ? "Selected" : "Open sources"}
+        </Button>
+        <Button
+          type="button"
+          variant={isWatched ? "secondary" : "outline"}
+          size="sm"
+          className="rounded-2xl"
+          onClick={() => onToggleWatched(episode.episodeNumber, !isWatched)}
+        >
+          {isWatched ? "Unwatch" : "Mark watched"}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="rounded-2xl"
+          onClick={() => void onMarkUntilWatched(episode.episodeNumber)}
+          disabled={isMarkingUntil}
+        >
+          {isMarkingUntil ? "Updating..." : "Watched until here"}
+        </Button>
+      </div>
+    </article>
   )
 }
 
@@ -817,6 +992,65 @@ function StatusCard({ label }: { label: string }) {
   )
 }
 
+function MovieTrackingSection({
+  isWatched,
+  onSetWatched,
+}: {
+  isWatched: boolean
+  onSetWatched: (watched: boolean) => void
+}) {
+  return (
+    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
+            Tracking
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {isWatched ? "Marked as watched locally." : "Not watched yet."}
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant={isWatched ? "secondary" : "default"}
+          className="rounded-2xl"
+          onClick={() => onSetWatched(!isWatched)}
+        >
+          {isWatched ? "Mark unwatched" : "Mark watched"}
+        </Button>
+      </div>
+    </section>
+  )
+}
+
+function TvTrackingSummary({
+  totalEpisodeCount,
+  watchedEpisodeCount,
+}: {
+  totalEpisodeCount: number | null
+  watchedEpisodeCount: number
+}) {
+  return (
+    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
+            Tracking
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {buildTvTrackingLabel(watchedEpisodeCount, totalEpisodeCount)}
+          </p>
+        </div>
+        <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-medium text-foreground">
+          {totalEpisodeCount
+            ? `${watchedEpisodeCount}/${totalEpisodeCount} watched`
+            : `${watchedEpisodeCount} watched`}
+        </span>
+      </div>
+    </section>
+  )
+}
+
 function buildFacts(detail: MediaDetail) {
   const facts: Array<{ label: string; value: string }> = []
 
@@ -866,4 +1100,23 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(parsedDate)
+}
+
+function buildTvTrackingLabel(
+  watchedEpisodeCount: number,
+  totalEpisodeCount: number | null
+) {
+  if (totalEpisodeCount && watchedEpisodeCount >= totalEpisodeCount) {
+    return "Every known episode is marked as watched locally."
+  }
+
+  if (watchedEpisodeCount === 0) {
+    return "No episode has been marked as watched yet."
+  }
+
+  if (totalEpisodeCount) {
+    return `${watchedEpisodeCount} of ${totalEpisodeCount} episodes are marked as watched locally.`
+  }
+
+  return `${watchedEpisodeCount} episodes are marked as watched locally.`
 }

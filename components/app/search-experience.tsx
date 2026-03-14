@@ -9,11 +9,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useRecentMedia } from "@/hooks/use-recent-media"
+import { useWatchProgress } from "@/hooks/use-watch-progress"
 import {
   getTmdbImageUrl,
   searchTmdbMedia,
   type SearchMediaItem,
 } from "@/lib/tmdb"
+import {
+  getWatchedEpisodeCount,
+  type MediaWatchProgress,
+} from "@/lib/watch-progress"
 
 type SearchStatus = "idle" | "loading" | "success" | "error"
 
@@ -43,6 +48,7 @@ export function SearchExperience() {
   const searchParams = useSearchParams()
   const { config } = useAppConfig()
   const { addItem, items: recentItems } = useRecentMedia()
+  const { getItem } = useWatchProgress()
   const requestIdRef = useRef(0)
   const queryFromUrl = searchParams.get("q")?.trim() ?? ""
   const [inputValue, setInputValue] = useState(queryFromUrl)
@@ -267,6 +273,7 @@ export function SearchExperience() {
                 key={`${item.mediaType}-${item.id}`}
                 item={item}
                 onOpen={addItem}
+                progress={getItem(item.mediaType, item.id)}
               />
             ))}
           </div>
@@ -302,9 +309,11 @@ export function SearchExperience() {
 function SearchResultCard({
   item,
   onOpen,
+  progress,
 }: {
   item: SearchMediaItem
   onOpen?: (item: SearchMediaItem) => void
+  progress?: MediaWatchProgress
 }) {
   const posterUrl = getTmdbImageUrl(item.posterPath)
 
@@ -337,6 +346,7 @@ function SearchResultCard({
           <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">
             {item.mediaType === "movie" ? "Movie" : "TV show"}
           </span>
+          <WatchBadge progress={progress} />
           {item.year ? (
             <span className="text-xs font-medium text-muted-foreground">
               {item.year}
@@ -378,6 +388,8 @@ function RecentMediaSection({
   items: SearchMediaItem[]
   onOpen: (item: SearchMediaItem) => void
 }) {
+  const { getItem } = useWatchProgress()
+
   if (items.length === 0) {
     return null
   }
@@ -394,10 +406,37 @@ function RecentMediaSection({
             key={`recent-${item.mediaType}-${item.id}`}
             item={item}
             onOpen={onOpen}
+            progress={getItem(item.mediaType, item.id)}
           />
         ))}
       </div>
     </section>
+  )
+}
+
+function WatchBadge({ progress }: { progress?: MediaWatchProgress }) {
+  if (!progress) {
+    return null
+  }
+
+  if (progress.mediaType === "movie") {
+    return (
+      <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-emerald-700 uppercase">
+        Watched
+      </span>
+    )
+  }
+
+  const watchedEpisodeCount = getWatchedEpisodeCount(progress)
+
+  if (watchedEpisodeCount === 0) {
+    return null
+  }
+
+  return (
+    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-emerald-700 uppercase">
+      {watchedEpisodeCount} watched
+    </span>
   )
 }
 
