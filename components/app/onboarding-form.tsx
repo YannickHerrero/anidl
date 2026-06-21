@@ -59,7 +59,7 @@ export function OnboardingForm() {
 
   if (!isHydrated) {
     return (
-      <div className="rounded-[28px] border border-border/70 bg-card/92 p-6 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur sm:p-8">
+      <div className="rounded-[14px] border border-border bg-card p-6 sm:p-8">
         <p className="text-sm font-semibold tracking-[0.24em] text-muted-foreground uppercase">
           Credentials
         </p>
@@ -172,15 +172,13 @@ function OnboardingFormFields({
 
   return (
     <section>
-      <article className="rounded-[28px] border border-border/70 bg-card/92 p-6 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur sm:p-8">
+      <article className="rounded-[14px] border border-border bg-card p-6 sm:p-8">
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div>
             <p className="text-sm font-semibold tracking-[0.24em] text-muted-foreground uppercase">
               Credentials
             </p>
-            <h2 className="mt-2 text-2xl font-semibold tracking-[-0.03em] text-foreground">
-              Add your API keys
-            </h2>
+            <h2 className="display mt-2 text-2xl">Add your API keys</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
               {isConfigured
                 ? "Your keys are already saved in this browser."
@@ -222,7 +220,7 @@ function OnboardingFormFields({
                   autoComplete="off"
                   aria-invalid={hasError}
                   disabled={isSubmitting}
-                  className="h-13 rounded-2xl bg-background/75 px-4"
+                  className="h-12 rounded-[10px] bg-background px-4"
                 />
 
                 <p className="text-sm leading-6 text-muted-foreground">
