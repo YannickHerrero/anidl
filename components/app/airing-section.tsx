@@ -5,6 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 
 import { useAnimeTracking } from "@/hooks/use-anime-tracking"
+import { useCountdown } from "@/hooks/use-countdown"
 import {
   fetchAnilistAiring,
   formatCountdown,
@@ -24,37 +25,29 @@ export function AiringSection() {
   const trackedIds = items.map((item) => item.anilistId)
   const trackedIdsKey = trackedIds.join(",")
   const [airingMedia, setAiringMedia] = useState<AnilistMedia[]>([])
-  const [status, setStatus] = useState<"idle" | "loading" | "error">("idle")
+  const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
-    if (trackedIds.length === 0) {
-      setAiringMedia([])
-      setStatus("idle")
-      return
-    }
-
     const abortController = new AbortController()
-    setStatus("loading")
+    const ids = trackedIdsKey
+      ? trackedIdsKey.split(",").map((value) => Number(value))
+      : []
 
-    fetchAnilistAiring(trackedIds, abortController.signal)
+    fetchAnilistAiring(ids, abortController.signal)
       .then((media) => {
         setAiringMedia(media)
-        setStatus("idle")
+        setHasError(false)
       })
-      .catch((error: unknown) => {
-        if (abortController.signal.aborted) {
-          return
+      .catch(() => {
+        if (!abortController.signal.aborted) {
+          setAiringMedia([])
+          setHasError(true)
         }
-
-        setAiringMedia([])
-        setStatus("error")
-        void error
       })
 
     return () => {
       abortController.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [trackedIdsKey])
 
   const mediaById = new Map(airingMedia.map((media) => [media.id, media]))
@@ -96,7 +89,7 @@ export function AiringSection() {
         </Link>
       </div>
 
-      {status === "error" ? (
+      {hasError ? (
         <p className="text-sm text-muted-foreground">
           Could not reach AniList for airing schedules right now.
         </p>
@@ -141,25 +134,4 @@ function AiringCard({ entry }: { entry: AiringEntry }) {
       <div className="h-1 bg-rose-500/80" />
     </Link>
   )
-}
-
-function useCountdown(airingAt: number) {
-  const [secondsUntil, setSecondsUntil] = useState(() =>
-    Math.max(0, airingAt - Math.floor(Date.now() / 1000))
-  )
-
-  useEffect(() => {
-    const update = () => {
-      setSecondsUntil(Math.max(0, airingAt - Math.floor(Date.now() / 1000)))
-    }
-
-    update()
-    const intervalId = window.setInterval(update, 1000)
-
-    return () => {
-      window.clearInterval(intervalId)
-    }
-  }, [airingAt])
-
-  return secondsUntil
 }

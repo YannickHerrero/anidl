@@ -6,6 +6,7 @@ import Image from "next/image"
 
 import { Button } from "@/components/ui/button"
 import { useAnimeTracking } from "@/hooks/use-anime-tracking"
+import { useCountdown } from "@/hooks/use-countdown"
 import {
   fetchAnilistAiring,
   formatCountdown,
@@ -21,16 +22,10 @@ export function AnimeListView() {
   )
 
   useEffect(() => {
+    const abortController = new AbortController()
     const ids = trackedIdsKey
       ? trackedIdsKey.split(",").map((value) => Number(value))
       : []
-
-    if (ids.length === 0) {
-      setMediaById(new Map())
-      return
-    }
-
-    const abortController = new AbortController()
 
     fetchAnilistAiring(ids, abortController.signal)
       .then((media) => {
@@ -93,9 +88,7 @@ function AnimeListRow({
   onRemove: () => void
 }) {
   const nextEpisode = media?.nextAiringEpisode
-  const secondsUntil = nextEpisode
-    ? Math.max(0, nextEpisode.airingAt - Math.floor(Date.now() / 1000))
-    : null
+  const secondsUntil = useCountdown(nextEpisode?.airingAt ?? 0)
 
   return (
     <section className="grid grid-cols-[64px_minmax(0,1fr)_auto] items-center gap-4 rounded-[24px] border border-border/70 bg-card/85 p-4 shadow-[0_18px_80px_-42px_rgba(18,38,33,0.38)]">
@@ -119,7 +112,7 @@ function AnimeListRow({
           {item.title}
         </Link>
         <p className="mt-1 text-xs text-muted-foreground">
-          {nextEpisode && secondsUntil !== null
+          {nextEpisode
             ? `Ep ${nextEpisode.episode} in ${formatCountdown(secondsUntil)}`
             : (media?.status ?? "No upcoming episode")}
         </p>
