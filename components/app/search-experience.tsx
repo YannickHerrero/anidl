@@ -5,13 +5,12 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
-import { AiringSection } from "@/components/app/airing-section"
-import { AnimeInProgressSection } from "@/components/app/anime-in-progress-section"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { useAppConfig } from "@/hooks/use-app-config"
+import { useAiring } from "@/hooks/use-airing"
+import { useCountdown } from "@/hooks/use-countdown"
 import { useRecentMedia } from "@/hooks/use-recent-media"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
+import { formatCountdown } from "@/lib/anilist"
 import {
   getTmdbImageUrl,
   searchTmdbMedia,
@@ -21,6 +20,7 @@ import {
   getWatchedEpisodeCount,
   type MediaWatchProgress,
 } from "@/lib/watch-progress"
+import { type AiringEntry } from "@/hooks/use-airing"
 
 type SearchStatus = "idle" | "loading" | "success" | "error"
 
@@ -135,7 +135,6 @@ export function SearchExperience() {
     }
 
     const abortController = new AbortController()
-
     void runSearch(queryFromUrl, 1, false, abortController.signal)
 
     return () => {
@@ -149,11 +148,17 @@ export function SearchExperience() {
     }
 
     if (searchState.totalResults === 1) {
-      return "1 match"
+      return "1 result"
     }
 
-    return `${searchState.totalResults.toLocaleString()} matches`
-  }, [hasActiveSearch, searchState.status, searchState.totalResults])
+    return `${searchState.totalResults.toLocaleString()} results · page ${searchState.page} of ${searchState.totalPages}`
+  }, [
+    hasActiveSearch,
+    searchState.status,
+    searchState.totalResults,
+    searchState.page,
+    searchState.totalPages,
+  ])
 
   const submitSearch = useCallback(
     (rawQuery: string) => {
@@ -178,13 +183,7 @@ export function SearchExperience() {
     }
 
     const abortController = new AbortController()
-
-    void runSearch(
-      queryFromUrl,
-      searchState.page + 1,
-      true,
-      abortController.signal
-    )
+    void runSearch(queryFromUrl, searchState.page + 1, true, abortController.signal)
   }, [
     hasMoreResults,
     queryFromUrl,
@@ -193,331 +192,280 @@ export function SearchExperience() {
     searchState.status,
   ])
 
-  const handleRetry = useCallback(() => {
-    if (!queryFromUrl || searchState.status === "loading") {
-      return
-    }
-
-    const abortController = new AbortController()
-
-    void runSearch(queryFromUrl, 1, false, abortController.signal)
-  }, [queryFromUrl, runSearch, searchState.status])
-
   return (
-    <div className="grid gap-6">
-      <section className="rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur sm:p-6">
+    <div className="flex max-w-[1220px] flex-col gap-10 px-8 py-12 pb-20 sm:px-14">
+      <div>
+        <h1 className="display max-w-[14ch] text-[40px] leading-none sm:text-[48px]">
+          What are we watching?
+        </h1>
         <form
-          className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"
+          className="mt-6 flex max-w-[680px] items-center gap-3.5 rounded-[14px] border border-border bg-card px-5 py-4"
           onSubmit={(event) => {
             event.preventDefault()
             submitSearch(inputValue)
           }}
         >
-          <div className="grid gap-2">
-            <label
-              htmlFor="search-query"
-              className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase"
-            >
-              Search query
-            </label>
-            <Input
-              id="search-query"
-              type="search"
-              value={inputValue}
-              onChange={(event) => setInputValue(event.target.value)}
-              placeholder="Search movies and TV shows on TMDB"
-              autoComplete="off"
-              className="h-12 rounded-2xl border-border/80 bg-background/80 px-4 text-sm shadow-none"
-            />
-          </div>
-
-          <Button type="submit" size="lg" className="rounded-2xl px-5">
-            Search TMDB
-          </Button>
+          <span className="size-[17px] flex-none rounded-full border-2 border-faint" />
+          <input
+            value={inputValue}
+            onChange={(event) => setInputValue(event.target.value)}
+            placeholder="Search movies & TV…"
+            autoComplete="off"
+            type="search"
+            className="flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-faint"
+          />
+          <span className="rounded-md border border-border px-2 py-1 font-mono text-[11px] text-faint">
+            ↵ enter
+          </span>
         </form>
-
         {resultLabel ? (
-          <div className="mt-4 text-sm text-muted-foreground">
+          <div className="mt-3 font-mono text-[11px] text-faint">
             {resultLabel}
           </div>
         ) : null}
-      </section>
+      </div>
 
       {!hasActiveSearch ? (
-        <div className="grid gap-6">
-          <AiringSection />
-          <AnimeInProgressSection />
-          <EmptyPrompt />
-          <RecentMediaSection items={recentItems} onOpen={addItem} />
-        </div>
+        <>
+          <AiringStrip />
+          {recentItems.length > 0 ? (
+            <ResultsGrid
+              label="Recently opened"
+              items={recentItems}
+              onOpen={addItem}
+              getProgress={getItem}
+            />
+          ) : (
+            <EmptyPrompt />
+          )}
+        </>
       ) : isInitialLoading ? (
-        <LoadingState query={queryFromUrl} />
+        <SectionNote label="Searching TMDB" body={`Looking for "${queryFromUrl}".`} />
       ) : searchState.status === "error" && searchState.items.length === 0 ? (
-        <ErrorState
-          query={queryFromUrl}
-          message={searchState.errorMessage}
-          onRetry={handleRetry}
+        <SectionNote
+          label="Search failed"
+          body={searchState.errorMessage ?? "Check the saved TMDB key and try again."}
         />
       ) : searchState.items.length === 0 ? (
-        <NoResultsState query={queryFromUrl} />
+        <SectionNote
+          label="No matches"
+          body={`TMDB returned nothing for "${queryFromUrl}".`}
+        />
       ) : (
-        <section className="grid gap-4">
-          <div className="flex items-center justify-between gap-4">
-            <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
-              Search results
-            </p>
-            <div className="rounded-full border border-border/70 bg-background/75 px-3 py-1 text-xs font-medium text-muted-foreground">
-              Page {searchState.page} of {searchState.totalPages}
-            </div>
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-2">
-            {searchState.items.map((item) => (
-              <SearchResultCard
-                key={`${item.mediaType}-${item.id}`}
-                item={item}
-                onOpen={addItem}
-                progress={getItem(item.mediaType, item.id)}
-              />
-            ))}
-          </div>
-
-          {searchState.status === "error" && searchState.errorMessage ? (
-            <div className="rounded-[24px] border border-destructive/25 bg-destructive/5 p-4 text-sm text-muted-foreground">
-              Could not load more results right now. {searchState.errorMessage}
-            </div>
-          ) : null}
-
-          <RecentMediaSection items={recentItems} onOpen={addItem} />
-
+        <div className="flex flex-col gap-9">
+          <ResultsGrid
+            label="Results"
+            items={searchState.items}
+            onOpen={addItem}
+            getProgress={getItem}
+          />
           {hasMoreResults ? (
-            <div className="flex justify-center pt-2">
-              <Button
+            <div className="flex items-center justify-center gap-4">
+              <button
                 type="button"
-                variant="outline"
-                size="lg"
-                className="rounded-2xl px-5"
                 onClick={handleLoadMore}
                 disabled={isLoadingMore}
+                className="rounded-[10px] border border-border bg-card px-6 py-3 text-[13.5px] font-semibold text-foreground transition-colors hover:bg-secondary disabled:opacity-50"
               >
-                {isLoadingMore ? "Loading more..." : "Load more"}
-              </Button>
+                {isLoadingMore ? "Loading…" : "Load more"}
+              </button>
+              <span className="font-mono text-[11px] text-faint">
+                showing {searchState.items.length} / {searchState.totalResults}
+              </span>
             </div>
           ) : null}
-        </section>
+        </div>
       )}
     </div>
   )
 }
 
-function SearchResultCard({
+function ResultsGrid({
+  label,
+  items,
+  onOpen,
+  getProgress,
+}: {
+  label: string
+  items: SearchMediaItem[]
+  onOpen: (item: SearchMediaItem) => void
+  getProgress: (
+    mediaType: SearchMediaItem["mediaType"],
+    id: number
+  ) => MediaWatchProgress | undefined
+}) {
+  return (
+    <div>
+      <SectionHeader label={label} />
+      <div className="grid grid-cols-2 gap-x-[18px] gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
+        {items.map((item) => (
+          <PosterCard
+            key={`${item.mediaType}-${item.id}`}
+            item={item}
+            onOpen={onOpen}
+            progress={getProgress(item.mediaType, item.id)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function PosterCard({
   item,
   onOpen,
   progress,
 }: {
   item: SearchMediaItem
-  onOpen?: (item: SearchMediaItem) => void
+  onOpen: (item: SearchMediaItem) => void
   progress?: MediaWatchProgress
 }) {
   const posterUrl = getTmdbImageUrl(item.posterPath)
+  const watchedLabel = watchBadgeLabel(progress)
 
   return (
     <Link
       href={`/media/${item.mediaType}/${item.id}`}
-      onClick={() => onOpen?.(item)}
-      className="group grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-4 shadow-[0_18px_80px_-42px_rgba(18,38,33,0.42)] transition-transform duration-200 hover:-translate-y-0.5 hover:border-primary/35 hover:bg-card sm:grid-cols-[112px_minmax(0,1fr)] sm:p-5"
+      onClick={() => onOpen(item)}
+      className="group flex flex-col gap-3 transition-transform duration-150 hover:-translate-y-1"
     >
-      <div className="overflow-hidden rounded-[24px] border border-border/60 bg-[linear-gradient(145deg,rgba(208,237,225,0.42),rgba(243,219,180,0.35))]">
+      <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-secondary">
         {posterUrl ? (
           <Image
             src={posterUrl}
             alt={`Poster for ${item.title}`}
-            className="aspect-[2/3] h-full w-full object-cover"
-            width={342}
-            height={513}
+            fill
+            sizes="(min-width: 1024px) 20vw, (min-width: 640px) 33vw, 50vw"
+            className="object-cover"
           />
-        ) : (
-          <div className="flex aspect-[2/3] items-end p-4">
-            <span className="rounded-full border border-border/70 bg-background/85 px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-              No poster
-            </span>
-          </div>
-        )}
+        ) : null}
+        <span className="absolute top-2.5 left-2.5 rounded-md bg-black/45 px-[7px] py-[3px] font-mono text-[10px] text-white backdrop-blur">
+          ★ {item.voteAverage !== null ? item.voteAverage.toFixed(1) : "—"}
+        </span>
+        <span className="absolute top-2.5 right-2.5 rounded-md bg-black/45 px-[6px] py-[3px] font-mono text-[9px] tracking-[0.06em] text-white backdrop-blur">
+          {item.mediaType === "movie" ? "FILM" : "TV"}
+        </span>
+        {watchedLabel ? (
+          <span className="absolute right-2.5 bottom-2.5 rounded-md bg-success px-[7px] py-[3px] font-mono text-[9px] tracking-[0.04em] text-success-foreground">
+            {watchedLabel}
+          </span>
+        ) : null}
       </div>
-
-      <article className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-primary uppercase">
-            {item.mediaType === "movie" ? "Movie" : "TV show"}
-          </span>
-          <WatchBadge progress={progress} />
-          {item.year ? (
-            <span className="text-xs font-medium text-muted-foreground">
-              {item.year}
-            </span>
-          ) : null}
-          {item.voteAverage !== null ? (
-            <span className="text-xs font-medium text-muted-foreground">
-              {item.voteAverage.toFixed(1)} / 10
-            </span>
-          ) : null}
-        </div>
-
-        <h2 className="mt-3 text-2xl font-semibold tracking-[-0.03em] text-foreground transition-colors group-hover:text-primary">
+      <div>
+        <div className="truncate text-[13.5px] font-semibold text-foreground">
           {item.title}
-        </h2>
-
-        <p className="mt-3 line-clamp-4 text-sm leading-6 text-muted-foreground">
-          {item.overview ||
-            "TMDB did not provide an overview for this title yet."}
-        </p>
-
-        <div className="mt-4 flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>
-            {item.voteCount > 0
-              ? `${item.voteCount.toLocaleString()} votes`
-              : "No rating count yet"}
-          </span>
-          <span className="font-medium text-primary">Open details</span>
         </div>
-      </article>
+        <div className="mt-[3px] font-mono text-[10.5px] text-faint">
+          {[item.year, item.mediaType === "movie" ? "MOVIE" : "TV"]
+            .filter(Boolean)
+            .join(" · ")}
+        </div>
+      </div>
     </Link>
   )
 }
 
-function RecentMediaSection({
-  items,
-  onOpen,
-}: {
-  items: SearchMediaItem[]
-  onOpen: (item: SearchMediaItem) => void
-}) {
-  const { getItem } = useWatchProgress()
+function AiringStrip() {
+  const { airing } = useAiring()
 
-  if (items.length === 0) {
+  if (airing.length === 0) {
     return null
   }
 
   return (
-    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/80 p-5 shadow-[0_18px_80px_-42px_rgba(18,38,33,0.38)] sm:p-6">
-      <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
-        Recently opened
-      </p>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        {items.map((item) => (
-          <SearchResultCard
-            key={`recent-${item.mediaType}-${item.id}`}
-            item={item}
-            onOpen={onOpen}
-            progress={getItem(item.mediaType, item.id)}
-          />
+    <div>
+      <div className="mb-[15px] flex items-center gap-2.5">
+        <span className="size-[7px] animate-[anidlPulse_1.6s_ease-in-out_infinite] rounded-full bg-primary" />
+        <span className="font-mono text-[11px] tracking-[0.08em] text-foreground">
+          AIRING NOW
+        </span>
+        <span className="h-px flex-1 bg-border" />
+      </div>
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
+        {airing.slice(0, 6).map((entry) => (
+          <AiringStripCard key={entry.tracked.anilistId} entry={entry} />
         ))}
       </div>
-    </section>
+    </div>
   )
 }
 
-function WatchBadge({ progress }: { progress?: MediaWatchProgress }) {
-  if (!progress) {
-    return null
-  }
-
-  if (progress.mediaType === "movie") {
-    return (
-      <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-emerald-700 uppercase">
-        Watched
-      </span>
-    )
-  }
-
-  const watchedEpisodeCount = getWatchedEpisodeCount(progress)
-
-  if (watchedEpisodeCount === 0) {
-    return null
-  }
+function AiringStripCard({ entry }: { entry: AiringEntry }) {
+  const secondsUntil = useCountdown(entry.airingAt)
 
   return (
-    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold tracking-[0.18em] text-emerald-700 uppercase">
-      {watchedEpisodeCount} watched
-    </span>
+    <Link
+      href={`/media/tv/${entry.tracked.tmdbId}`}
+      className="flex items-center gap-3.5 rounded-[13px] border border-l-2 border-border border-l-primary bg-card p-3.5 transition-transform duration-150 hover:-translate-y-[3px]"
+    >
+      <div className="relative h-[62px] w-[46px] flex-none overflow-hidden rounded-[7px] bg-secondary">
+        {entry.tracked.coverImage ? (
+          <Image
+            src={entry.tracked.coverImage}
+            alt=""
+            fill
+            sizes="46px"
+            className="object-cover"
+          />
+        ) : null}
+      </div>
+      <div className="min-w-0">
+        <div className="truncate text-[13.5px] font-semibold text-foreground">
+          {entry.tracked.title}
+        </div>
+        <div className="mt-[3px] font-mono text-[11px] text-primary">
+          EP {entry.episode}
+        </div>
+        <div className="mt-[5px] font-mono text-[12px] text-muted-foreground">
+          {formatCountdown(secondsUntil)}
+        </div>
+      </div>
+    </Link>
+  )
+}
+
+function SectionHeader({ label }: { label: string }) {
+  return (
+    <div className="mb-4 flex items-center gap-2.5">
+      <span className="font-mono text-[11px] tracking-[0.08em] text-foreground">
+        {label.toUpperCase()}
+      </span>
+      <span className="h-px flex-1 bg-border" />
+    </div>
+  )
+}
+
+function SectionNote({ label, body }: { label: string; body: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-6">
+      <p className="font-mono text-[11px] tracking-[0.08em] text-primary">
+        {label.toUpperCase()}
+      </p>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">{body}</p>
+    </div>
   )
 }
 
 function EmptyPrompt() {
   return (
-    <section className="rounded-[30px] border border-dashed border-border/75 bg-card/65 p-8 text-center shadow-[0_18px_80px_-42px_rgba(18,38,33,0.35)]">
-      <p className="text-xs font-semibold tracking-[0.28em] text-primary/80 uppercase">
-        Ready to search
+    <div className="rounded-2xl border border-dashed border-border bg-card/60 p-10 text-center">
+      <p className="font-mono text-[11px] tracking-[0.1em] text-primary">
+        READY TO SEARCH
       </p>
-      <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-foreground">
-        Start with a movie or TV title.
-      </h2>
-    </section>
+      <h2 className="display mt-3 text-3xl">Start with a movie or TV title.</h2>
+    </div>
   )
 }
 
-function LoadingState({ query }: { query: string }) {
-  return (
-    <section className="rounded-[30px] border border-border/70 bg-card/80 p-6 shadow-[0_18px_80px_-42px_rgba(18,38,33,0.4)]">
-      <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
-        Searching TMDB
-      </p>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        Looking for matches for{" "}
-        <span className="font-medium text-foreground">{query}</span>.
-      </p>
-    </section>
-  )
-}
+function watchBadgeLabel(progress?: MediaWatchProgress): string | null {
+  if (!progress) {
+    return null
+  }
 
-function ErrorState({
-  query,
-  message,
-  onRetry,
-}: {
-  query: string
-  message: string | null
-  onRetry: () => void
-}) {
-  return (
-    <section className="rounded-[30px] border border-destructive/25 bg-destructive/5 p-6 shadow-[0_18px_80px_-42px_rgba(130,40,34,0.16)]">
-      <p className="text-xs font-semibold tracking-[0.24em] text-destructive uppercase">
-        Search failed
-      </p>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        TMDB could not complete the search for{" "}
-        <span className="font-medium text-foreground">{query}</span>.
-      </p>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        {message ?? "Check the saved TMDB key and try again."}
-      </p>
-      <Button
-        type="button"
-        variant="outline"
-        className="mt-4 rounded-2xl"
-        onClick={onRetry}
-      >
-        Retry search
-      </Button>
-    </section>
-  )
-}
+  if (progress.mediaType === "movie") {
+    return "WATCHED"
+  }
 
-function NoResultsState({ query }: { query: string }) {
-  return (
-    <section className="rounded-[30px] border border-border/70 bg-card/80 p-6 shadow-[0_18px_80px_-42px_rgba(18,38,33,0.4)]">
-      <p className="text-xs font-semibold tracking-[0.24em] text-primary/80 uppercase">
-        No matches found
-      </p>
-      <p className="mt-3 text-sm leading-6 text-muted-foreground">
-        TMDB did not return any movie or TV result for{" "}
-        <span className="font-medium text-foreground">{query}</span>.
-      </p>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        Try a broader title, an original title, or remove the year from your
-        query.
-      </p>
-    </section>
-  )
+  const count = getWatchedEpisodeCount(progress)
+  return count > 0 ? `${count} WATCHED` : null
 }
