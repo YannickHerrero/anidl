@@ -1,12 +1,12 @@
-import { AnimeListView } from "@/components/app/anime-list-view"
+import { AiringView } from "@/components/app/airing-view"
 import { ConfigRequired } from "@/components/app/config-required"
 import { SidebarShell } from "@/components/app/sidebar-shell"
 
-export default function ListPage() {
+export default function AiringPage() {
   return (
     <ConfigRequired>
       <SidebarShell>
-        <AnimeListView />
+        <AiringView />
       </SidebarShell>
     </ConfigRequired>
   )
