@@ -174,8 +174,10 @@
   }
 }
 
-.display {
-  font-family: var(--font-display), var(--font-sans), sans-serif;
-  font-weight: 700;
-  letter-spacing: -0.035em;
+@layer components {
+  .display {
+    font-family: var(--font-display), var(--font-sans), sans-serif;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+  }
 }
