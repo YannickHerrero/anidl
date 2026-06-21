@@ -12,9 +12,15 @@ import Link from "next/link"
 
 import { SourceResultsPanel } from "@/components/app/source-results-panel"
 import { Button } from "@/components/ui/button"
+import { useAnimeTracking } from "@/hooks/use-anime-tracking"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useRecentMedia } from "@/hooks/use-recent-media"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
+import {
+  pickBestAnilistMatch,
+  searchAnilistAnime,
+  type AnilistMedia,
+} from "@/lib/anilist"
 import {
   validateRealDebridApiKey,
   type RealDebridUser,
@@ -219,6 +225,14 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         <MovieTrackingSection
           isWatched={watchProgress?.mediaType === "movie"}
           onSetWatched={(watched) => markMovieWatched(tmdbId, watched)}
+        />
+      ) : null}
+
+      {displayDetail?.mediaType === "tv" ? (
+        <AnimeTrackingSection
+          tmdbId={tmdbId}
+          title={displayDetail.title}
+          year={displayDetail.year}
         />
       ) : null}
 
@@ -972,6 +986,159 @@ function TvTrackingSummary({
             : `${watchedEpisodeCount} watched`}
         </span>
       </div>
+    </section>
+  )
+}
+
+function AnimeTrackingSection({
+  tmdbId,
+  title,
+  year,
+}: {
+  tmdbId: number
+  title: string
+  year: string | null
+}) {
+  const { getByTmdbId, addItem, removeItem, updateMatch } = useAnimeTracking()
+  const tracked = getByTmdbId(tmdbId)
+  const [status, setStatus] = useState<
+    "idle" | "searching" | "no-match" | "error"
+  >("idle")
+  const [pickerResults, setPickerResults] = useState<AnilistMedia[] | null>(
+    null
+  )
+
+  const handleAdd = async () => {
+    setStatus("searching")
+    setPickerResults(null)
+
+    try {
+      const results = await searchAnilistAnime(title)
+      const best = pickBestAnilistMatch(results, year)
+
+      if (!best) {
+        setStatus("no-match")
+        return
+      }
+
+      addItem({
+        anilistId: best.id,
+        tmdbId,
+        title: best.title,
+        coverImage: best.coverImage,
+      })
+      setStatus("idle")
+    } catch {
+      setStatus("error")
+    }
+  }
+
+  const handleOpenPicker = async () => {
+    setStatus("searching")
+
+    try {
+      const results = await searchAnilistAnime(title)
+      setPickerResults(results)
+      setStatus(results.length === 0 ? "no-match" : "idle")
+    } catch {
+      setStatus("error")
+    }
+  }
+
+  const handlePick = (media: AnilistMedia) => {
+    if (tracked) {
+      updateMatch(tmdbId, media)
+    } else {
+      addItem({
+        anilistId: media.id,
+        tmdbId,
+        title: media.title,
+        coverImage: media.coverImage,
+      })
+    }
+    setPickerResults(null)
+    setStatus("idle")
+  }
+
+  return (
+    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
+            My list
+          </p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {tracked
+              ? `Tracking via AniList: ${tracked.title}`
+              : status === "searching"
+                ? "Searching AniList…"
+                : status === "no-match"
+                  ? "No AniList anime match found."
+                  : status === "error"
+                    ? "Could not reach AniList. Try again."
+                    : "Not in your list yet."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {tracked ? (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-2xl"
+                onClick={handleOpenPicker}
+                disabled={status === "searching"}
+              >
+                Change match
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-2xl"
+                onClick={() => {
+                  removeItem(tmdbId)
+                  setPickerResults(null)
+                  setStatus("idle")
+                }}
+              >
+                Remove
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              className="rounded-2xl"
+              onClick={handleAdd}
+              disabled={status === "searching"}
+            >
+              Add to my list
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {pickerResults && pickerResults.length > 0 ? (
+        <div className="grid gap-2">
+          <p className="text-xs font-medium text-muted-foreground">
+            Pick the matching AniList entry:
+          </p>
+          {pickerResults.map((media) => (
+            <button
+              key={media.id}
+              type="button"
+              onClick={() => handlePick(media)}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-2 text-left text-sm transition-colors hover:border-primary/40 hover:bg-background"
+            >
+              <span className="min-w-0 truncate text-foreground">
+                {media.title}
+              </span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {[media.format, media.seasonYear].filter(Boolean).join(" · ")}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : null}
     </section>
   )
 }
