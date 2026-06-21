@@ -5,6 +5,8 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
+import { AiringSection } from "@/components/app/airing-section"
+import { AnimeInProgressSection } from "@/components/app/anime-in-progress-section"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useAppConfig } from "@/hooks/use-app-config"
@@ -243,6 +245,8 @@ export function SearchExperience() {
 
       {!hasActiveSearch ? (
         <div className="grid gap-6">
+          <AiringSection />
+          <AnimeInProgressSection />
           <EmptyPrompt />
           <RecentMediaSection items={recentItems} onOpen={addItem} />
         </div>
