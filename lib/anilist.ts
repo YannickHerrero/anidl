@@ -1,0 +1,260 @@
+export type AnilistAiringEpisode = {
+  episode: number
+  airingAt: number
+  timeUntilAiring: number
+}
+
+export type AnilistMedia = {
+  id: number
+  title: string
+  coverImage: string | null
+  format: string | null
+  seasonYear: number | null
+  episodes: number | null
+  status: string | null
+  nextAiringEpisode: AnilistAiringEpisode | null
+}
+
+type AnilistMediaResponse = {
+  id: number
+  title?: {
+    english?: string | null
+    romaji?: string | null
+    native?: string | null
+  } | null
+  coverImage?: {
+    large?: string | null
+    medium?: string | null
+  } | null
+  format?: string | null
+  seasonYear?: number | null
+  episodes?: number | null
+  status?: string | null
+  nextAiringEpisode?: {
+    episode?: number | null
+    airingAt?: number | null
+    timeUntilAiring?: number | null
+  } | null
+}
+
+type AnilistPageResponse = {
+  data?: {
+    Page?: {
+      media?: AnilistMediaResponse[] | null
+    } | null
+  } | null
+  errors?: Array<{ message?: string }> | null
+}
+
+type AnilistGraphqlRequest = {
+  query: string
+  variables?: Record<string, unknown>
+  signal?: AbortSignal
+}
+
+const MEDIA_FIELDS = `
+  id
+  title {
+    english
+    romaji
+    native
+  }
+  coverImage {
+    large
+    medium
+  }
+  format
+  seasonYear
+  episodes
+  status
+  nextAiringEpisode {
+    episode
+    airingAt
+    timeUntilAiring
+  }
+`
+
+const SEARCH_ANIME_QUERY = `
+  query ($search: String) {
+    Page(perPage: 5) {
+      media(search: $search, type: ANIME, sort: SEARCH_MATCH) {
+        ${MEDIA_FIELDS}
+      }
+    }
+  }
+`
+
+const AIRING_QUERY = `
+  query ($ids: [Int]) {
+    Page(perPage: 50) {
+      media(id_in: $ids, type: ANIME) {
+        ${MEDIA_FIELDS}
+      }
+    }
+  }
+`
+
+const PREFERRED_TV_FORMATS = new Set(["TV", "TV_SHORT", "ONA"])
+
+async function requestAnilist({
+  query,
+  variables,
+  signal,
+}: AnilistGraphqlRequest): Promise<AnilistMedia[]> {
+  const response = await fetch("/api/anilist", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`AniList request failed with status ${response.status}`)
+  }
+
+  const payload = (await response.json()) as AnilistPageResponse
+
+  if (payload.errors?.length) {
+    throw new Error(
+      payload.errors[0]?.message ?? "AniList returned an error response."
+    )
+  }
+
+  return (payload.data?.Page?.media ?? []).map(normalizeAnilistMedia)
+}
+
+export async function searchAnilistAnime(
+  title: string,
+  signal?: AbortSignal
+): Promise<AnilistMedia[]> {
+  const trimmedTitle = title.trim()
+
+  if (!trimmedTitle) {
+    return []
+  }
+
+  return requestAnilist({
+    query: SEARCH_ANIME_QUERY,
+    variables: { search: trimmedTitle },
+    signal,
+  })
+}
+
+export async function fetchAnilistAiring(
+  ids: number[],
+  signal?: AbortSignal
+): Promise<AnilistMedia[]> {
+  const validIds = Array.from(
+    new Set(ids.filter((id) => Number.isInteger(id) && id > 0))
+  )
+
+  if (validIds.length === 0) {
+    return []
+  }
+
+  return requestAnilist({
+    query: AIRING_QUERY,
+    variables: { ids: validIds },
+    signal,
+  })
+}
+
+export function pickBestAnilistMatch(
+  results: AnilistMedia[],
+  year?: string | null
+): AnilistMedia | null {
+  if (results.length === 0) {
+    return null
+  }
+
+  const targetYear = year ? Number(year) : null
+
+  if (targetYear) {
+    const yearAndTvMatch = results.find(
+      (media) =>
+        media.seasonYear === targetYear &&
+        media.format !== null &&
+        PREFERRED_TV_FORMATS.has(media.format)
+    )
+
+    if (yearAndTvMatch) {
+      return yearAndTvMatch
+    }
+
+    const yearMatch = results.find((media) => media.seasonYear === targetYear)
+
+    if (yearMatch) {
+      return yearMatch
+    }
+  }
+
+  const tvMatch = results.find(
+    (media) => media.format !== null && PREFERRED_TV_FORMATS.has(media.format)
+  )
+
+  return tvMatch ?? results[0]
+}
+
+export function formatCountdown(secondsUntil: number): string {
+  const totalSeconds = Math.max(0, Math.floor(secondsUntil))
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+
+  if (days > 0) {
+    return `${days}d ${hours}h ${minutes}m`
+  }
+
+  if (hours > 0) {
+    return `${hours}h ${minutes}m`
+  }
+
+  if (minutes > 0) {
+    return `${minutes}m`
+  }
+
+  return "Airing now"
+}
+
+function normalizeAnilistMedia(media: AnilistMediaResponse): AnilistMedia {
+  const title =
+    media.title?.english?.trim() ||
+    media.title?.romaji?.trim() ||
+    media.title?.native?.trim() ||
+    `Anime ${media.id}`
+
+  return {
+    id: media.id,
+    title,
+    coverImage: media.coverImage?.large ?? media.coverImage?.medium ?? null,
+    format: media.format ?? null,
+    seasonYear:
+      typeof media.seasonYear === "number" ? media.seasonYear : null,
+    episodes: typeof media.episodes === "number" ? media.episodes : null,
+    status: media.status ?? null,
+    nextAiringEpisode: normalizeNextAiringEpisode(media.nextAiringEpisode),
+  }
+}
+
+function normalizeNextAiringEpisode(
+  episode: AnilistMediaResponse["nextAiringEpisode"]
+): AnilistAiringEpisode | null {
+  if (
+    !episode ||
+    typeof episode.episode !== "number" ||
+    typeof episode.airingAt !== "number"
+  ) {
+    return null
+  }
+
+  return {
+    episode: episode.episode,
+    airingAt: episode.airingAt,
+    timeUntilAiring:
+      typeof episode.timeUntilAiring === "number"
+        ? episode.timeUntilAiring
+        : 0,
+  }
+}
