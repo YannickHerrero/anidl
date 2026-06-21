@@ -21,6 +21,7 @@ import {
   type MediaWatchProgress,
 } from "@/lib/watch-progress"
 import { type AiringEntry } from "@/hooks/use-airing"
+import { cn } from "@/lib/utils"
 
 type SearchStatus = "idle" | "loading" | "success" | "error"
 
@@ -347,8 +348,7 @@ function PosterCard({
   anime?: AnimeAiringInfo
 }) {
   const posterUrl = getTmdbImageUrl(item.posterPath)
-  const secondsUntil = useCountdown(anime?.next?.airingAt ?? 0)
-  const watchedLabel = watchBadgeLabel(progress, anime, secondsUntil)
+  const cardProgress = buildCardProgress(progress, anime)
 
   return (
     <Link
@@ -372,11 +372,6 @@ function PosterCard({
         <span className="absolute top-2.5 right-2.5 rounded-md bg-black/45 px-[6px] py-[3px] font-mono text-[9px] tracking-[0.06em] text-white backdrop-blur">
           {item.mediaType === "movie" ? "FILM" : "TV"}
         </span>
-        {watchedLabel ? (
-          <span className="absolute inset-x-2 bottom-2 truncate rounded-md bg-success px-[7px] py-[3px] text-center font-mono text-[9px] tracking-[0.04em] text-success-foreground">
-            {watchedLabel}
-          </span>
-        ) : null}
       </div>
       <div>
         <div className="truncate text-[13.5px] font-semibold text-foreground">
@@ -387,6 +382,11 @@ function PosterCard({
             .filter(Boolean)
             .join(" · ")}
         </div>
+        {cardProgress ? (
+          <div className={cn("mt-1 font-mono text-[10.5px]", cardProgress.tone)}>
+            {cardProgress.label}
+          </div>
+        ) : null}
       </div>
     </Link>
   )
@@ -508,17 +508,16 @@ function EmptyPrompt() {
   )
 }
 
-function watchBadgeLabel(
+function buildCardProgress(
   progress: MediaWatchProgress | undefined,
-  anime: AnimeAiringInfo | undefined,
-  secondsUntil: number
-): string | null {
+  anime: AnimeAiringInfo | undefined
+): { label: string; tone: string } | null {
   if (!progress) {
     return null
   }
 
   if (progress.mediaType === "movie") {
-    return "WATCHED"
+    return { label: "Watched", tone: "text-success" }
   }
 
   const count = getWatchedEpisodeCount(progress)
@@ -529,12 +528,16 @@ function watchBadgeLabel(
 
   if (anime?.next) {
     const aired = Math.max(anime.next.episode - 1, count)
-    return `${count}/${aired} · next in ${formatCountdown(secondsUntil)}`
+    const behind = aired - count
+    return {
+      label: `${count}/${aired} · ${behind <= 0 ? "up to date" : `${behind} behind`}`,
+      tone: behind > 0 ? "text-primary" : "text-success",
+    }
   }
 
   if (anime?.total) {
-    return `${count}/${anime.total}`
+    return { label: `${count}/${anime.total} watched`, tone: "text-faint" }
   }
 
-  return `${count} watched`
+  return { label: `${count} watched`, tone: "text-faint" }
 }

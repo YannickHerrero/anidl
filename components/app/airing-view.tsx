@@ -156,18 +156,19 @@ function ProgressCard({
   watched: number
 }) {
   const next = media?.nextAiringEpisode ?? null
-  const secondsUntil = useCountdown(next?.airingAt ?? 0)
   const total = media?.episodes ?? null
   const aired = next ? Math.max(next.episode - 1, watched) : null
   const denominator = total ?? aired
   const pct = denominator
     ? Math.min(100, Math.round((watched / denominator) * 100))
     : 0
-  const label = next
-    ? `${watched}/${aired} · next in ${formatCountdown(secondsUntil)}`
-    : total
-      ? `${watched}/${total}`
-      : `${watched} watched`
+  const behind = aired !== null ? aired - watched : 0
+  const label =
+    aired !== null
+      ? `${watched}/${aired} · ${behind <= 0 ? "up to date" : `${behind} behind`}`
+      : total
+        ? `${watched}/${total}`
+        : `${watched} watched`
 
   return (
     <Link
