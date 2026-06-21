@@ -1,23 +1,22 @@
 import { notFound } from "next/navigation"
 
 import { ConfigRequired } from "@/components/app/config-required"
-import { MediaDetail } from "@/components/app/media-detail"
+import { EpisodesView } from "@/components/app/episodes-view"
 import { SidebarShell } from "@/components/app/sidebar-shell"
-import { type SearchMediaType } from "@/lib/tmdb"
 
-type DetailPageProps = {
+type EpisodesPageProps = {
   params: Promise<{
     mediaType: string
     tmdbId: string
   }>
 }
 
-export default async function DetailPage({ params }: DetailPageProps) {
+export default async function EpisodesPage({ params }: EpisodesPageProps) {
   const { mediaType, tmdbId } = await params
   const numericTmdbId = Number(tmdbId)
 
   if (
-    (mediaType !== "movie" && mediaType !== "tv") ||
+    mediaType !== "tv" ||
     !Number.isInteger(numericTmdbId) ||
     numericTmdbId <= 0
   ) {
@@ -27,10 +26,7 @@ export default async function DetailPage({ params }: DetailPageProps) {
   return (
     <ConfigRequired>
       <SidebarShell>
-        <MediaDetail
-          mediaType={mediaType as SearchMediaType}
-          tmdbId={numericTmdbId}
-        />
+        <EpisodesView tmdbId={numericTmdbId} />
       </SidebarShell>
     </ConfigRequired>
   )

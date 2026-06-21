@@ -1,17 +1,10 @@
 "use client"
 
-import {
-  type Dispatch,
-  type SetStateAction,
-  useEffect,
-  useMemo,
-  useState,
-} from "react"
+import { useEffect, useMemo, useState } from "react"
 import Image from "next/image"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
-import { SourceResultsPanel } from "@/components/app/source-results-panel"
-import { Button } from "@/components/ui/button"
 import { useAnimeTracking } from "@/hooks/use-anime-tracking"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useRecentMedia } from "@/hooks/use-recent-media"
@@ -22,31 +15,14 @@ import {
   type AnilistMedia,
 } from "@/lib/anilist"
 import {
-  validateRealDebridApiKey,
-  type RealDebridUser,
-} from "@/lib/real-debrid"
-import {
-  fetchTmdbExternalIds,
   fetchTmdbMediaDetail,
-  fetchTmdbTvSeasonDetail,
   getTmdbImageUrl,
   mediaDetailToSearchItem,
-  type MediaDetail,
+  type MediaDetail as MediaDetailType,
   type SearchMediaType,
-  type TvEpisodeDetail,
-  type TvSeasonDetail,
 } from "@/lib/tmdb"
-import {
-  fetchTorrentioEpisodeSources,
-  fetchTorrentioMovieSources,
-  type TorrentioSource,
-} from "@/lib/torrentio"
-import {
-  getWatchedEpisodeCount,
-  getWatchedSeasonEpisodeCount,
-  isEpisodeWatched,
-  type MediaWatchProgress,
-} from "@/lib/watch-progress"
+import { getWatchedEpisodeCount } from "@/lib/watch-progress"
+import { cn } from "@/lib/utils"
 
 type MediaDetailProps = Readonly<{
   mediaType: SearchMediaType
@@ -54,31 +30,15 @@ type MediaDetailProps = Readonly<{
 }>
 
 type DetailState =
-  | { status: "loading"; detail: MediaDetail | null }
-  | { status: "success"; detail: MediaDetail }
-  | { status: "error"; detail: MediaDetail | null; message: string }
-
-type SourceState = {
-  status: "idle" | "loading" | "success" | "error"
-  sources: TorrentioSource[]
-  message: string | null
-}
-
-type SeasonState = {
-  status: "idle" | "loading" | "success" | "error"
-  season: TvSeasonDetail | null
-  message: string | null
-}
-
-type RealDebridState =
-  | { status: "loading" }
-  | { status: "success"; user: RealDebridUser }
-  | { status: "error"; message: string }
+  | { status: "loading"; detail: MediaDetailType | null }
+  | { status: "success"; detail: MediaDetailType }
+  | { status: "error"; detail: MediaDetailType | null; message: string }
 
 export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
+  const router = useRouter()
   const { config } = useAppConfig()
   const { addItem, items } = useRecentMedia()
-  const { getItem, markEpisodeWatched, markMovieWatched } = useWatchProgress()
+  const { getItem, markMovieWatched } = useWatchProgress()
   const recentItem = useMemo(
     () =>
       items.find((item) => item.mediaType === mediaType && item.id === tmdbId),
@@ -88,58 +48,7 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
     status: "loading",
     detail: null,
   })
-  const [sourceState, setSourceState] = useState<SourceState>({
-    status: mediaType === "movie" ? "loading" : "idle",
-    sources: [],
-    message: null,
-  })
-  const [selectedSeason, setSelectedSeason] = useState(1)
-  const [selectedEpisode, setSelectedEpisode] = useState<number | null>(null)
-  const [seasonState, setSeasonState] = useState<SeasonState>({
-    status: mediaType === "tv" ? "loading" : "idle",
-    season: null,
-    message: null,
-  })
-  const [realDebridState, setRealDebridState] = useState<RealDebridState>({
-    status: "loading",
-  })
   const watchProgress = getItem(mediaType, tmdbId)
-
-  useEffect(() => {
-    const abortController = new AbortController()
-
-    void validateRealDebridApiKey({
-      apiKey: config.realDebridApiKey,
-      signal: abortController.signal,
-    })
-      .then((user) => {
-        if (abortController.signal.aborted) {
-          return
-        }
-
-        setRealDebridState({
-          status: "success",
-          user,
-        })
-      })
-      .catch((error: unknown) => {
-        if (abortController.signal.aborted) {
-          return
-        }
-
-        setRealDebridState({
-          status: "error",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Could not validate Real-Debrid",
-        })
-      })
-
-    return () => {
-      abortController.abort()
-    }
-  }, [config.realDebridApiKey])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -154,7 +63,6 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         if (abortController.signal.aborted) {
           return
         }
-
         addItem(mediaDetailToSearchItem(detail))
         setState({ status: "success", detail })
       })
@@ -162,14 +70,11 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         if (abortController.signal.aborted) {
           return
         }
-
         setState((currentState) => ({
           status: "error",
           detail: currentState.detail,
           message:
-            error instanceof Error
-              ? error.message
-              : "Could not load this title.",
+            error instanceof Error ? error.message : "Could not load this title.",
         }))
       })
 
@@ -178,7 +83,7 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
     }
   }, [addItem, config.tmdbApiKey, mediaType, tmdbId])
 
-  const displayDetail =
+  const detail: MediaDetailType | null =
     state.detail ??
     (recentItem
       ? {
@@ -204,789 +109,189 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         }
       : null)
 
-  return (
-    <div className="grid gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <Button asChild variant="outline" className="rounded-2xl">
-          <Link href="/search">Back to search</Link>
-        </Button>
-        <div className="text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-          TMDB {tmdbId}
-        </div>
-      </div>
-
-      {displayDetail ? (
-        <DetailCard detail={displayDetail} />
-      ) : (
-        <SkeletonCard mediaType={mediaType} tmdbId={tmdbId} />
-      )}
-
-      {displayDetail?.mediaType === "movie" ? (
-        <MovieTrackingSection
-          isWatched={watchProgress?.mediaType === "movie"}
-          onSetWatched={(watched) => markMovieWatched(tmdbId, watched)}
-        />
-      ) : null}
-
-      {displayDetail?.mediaType === "tv" ? (
-        <AnimeTrackingSection
-          tmdbId={tmdbId}
-          title={displayDetail.title}
-          year={displayDetail.year}
-        />
-      ) : null}
-
-      {displayDetail?.mediaType === "tv" ? (
-        <TvTrackingSummary
-          totalEpisodeCount={displayDetail.episodeCount}
-          watchedEpisodeCount={getWatchedEpisodeCount(watchProgress)}
-        />
-      ) : null}
-
-      {displayDetail?.mediaType === "tv" && displayDetail.seasonCount ? (
-        <SeasonSelector
-          tmdbId={tmdbId}
-          seasonCount={displayDetail.seasonCount}
-          watchedEpisodeCount={getWatchedSeasonEpisodeCount(
-            watchProgress,
-            selectedSeason
-          )}
-          currentSeasonEpisodeCount={
-            seasonState.season?.episodes.length ?? null
-          }
-          selectedSeason={selectedSeason}
-          onSelect={(seasonNumber) => {
-            setSeasonState({
-              status: "loading",
-              season: null,
-              message: null,
-            })
-            setSourceState({
-              status: "idle",
-              sources: [],
-              message: null,
-            })
-            setSelectedEpisode(null)
-            setSelectedSeason(seasonNumber)
-          }}
-        />
-      ) : null}
-
-      {mediaType === "tv" ? (
-        <TvEpisodeSection
-          realDebridState={realDebridState}
-          tmdbId={tmdbId}
-          tmdbApiKey={config.tmdbApiKey}
-          realDebridApiKey={config.realDebridApiKey}
-          selectedSeason={selectedSeason}
-          selectedEpisode={selectedEpisode}
-          seasonState={seasonState}
-          sourceState={sourceState}
-          watchProgress={watchProgress}
-          onSeasonStateChange={setSeasonState}
-          onSelectedEpisodeChange={setSelectedEpisode}
-          onSourceStateChange={setSourceState}
-          onMarkEpisodeWatched={markEpisodeWatched}
-        />
-      ) : null}
-
-      {mediaType === "movie" ? (
-        realDebridState.status === "success" ? (
-          <MovieSourceSection
-            tmdbId={tmdbId}
-            tmdbApiKey={config.tmdbApiKey}
-            realDebridApiKey={config.realDebridApiKey}
-            state={sourceState}
-            onStateChange={setSourceState}
-          />
-        ) : (
-          <SourceResultsPanel
-            title="Sources"
-            status={realDebridState.status === "loading" ? "loading" : "error"}
-            sources={[]}
-            message={
-              realDebridState.status === "error"
-                ? realDebridState.message
-                : null
-            }
-          />
-        )
-      ) : null}
-
-      {state.status === "loading" ? <StatusCard label="Loading" /> : null}
-      {state.status === "error" ? <StatusCard label={state.message} /> : null}
-    </div>
-  )
-}
-
-function SeasonSelector({
-  tmdbId,
-  seasonCount,
-  watchedEpisodeCount,
-  currentSeasonEpisodeCount,
-  selectedSeason,
-  onSelect,
-}: {
-  tmdbId: number
-  seasonCount: number
-  watchedEpisodeCount: number
-  currentSeasonEpisodeCount: number | null
-  selectedSeason: number
-  onSelect: (seasonNumber: number) => void
-}) {
-  return (
-    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
-      <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
-        Seasons
-      </p>
-      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-        <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 font-medium text-foreground">
-          {currentSeasonEpisodeCount
-            ? `${watchedEpisodeCount}/${currentSeasonEpisodeCount} watched`
-            : `${watchedEpisodeCount} watched`}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {Array.from({ length: seasonCount }, (_, index) => index + 1).map(
-          (seasonNumber) => (
-            <Button
-              key={seasonNumber}
-              type="button"
-              variant={seasonNumber === selectedSeason ? "default" : "outline"}
-              className="rounded-2xl"
-              onClick={() => onSelect(seasonNumber)}
-            >
-              Season {seasonNumber}
-            </Button>
-          )
-        )}
-      </div>
-      <div>
-        <Button asChild variant="outline" className="rounded-2xl">
-          <Link href={`/media/tv/${tmdbId}/season/${selectedSeason}`}>
-            Download season
-          </Link>
-        </Button>
-      </div>
-    </section>
-  )
-}
-
-function TvEpisodeSection({
-  realDebridState,
-  tmdbId,
-  tmdbApiKey,
-  realDebridApiKey,
-  selectedSeason,
-  selectedEpisode,
-  seasonState,
-  sourceState,
-  watchProgress,
-  onSeasonStateChange,
-  onSelectedEpisodeChange,
-  onSourceStateChange,
-  onMarkEpisodeWatched,
-}: {
-  realDebridState: RealDebridState
-  tmdbId: number
-  tmdbApiKey: string
-  realDebridApiKey: string
-  selectedSeason: number
-  selectedEpisode: number | null
-  seasonState: SeasonState
-  sourceState: SourceState
-  watchProgress: MediaWatchProgress | undefined
-  onSeasonStateChange: Dispatch<SetStateAction<SeasonState>>
-  onSelectedEpisodeChange: Dispatch<SetStateAction<number | null>>
-  onSourceStateChange: Dispatch<SetStateAction<SourceState>>
-  onMarkEpisodeWatched: (
-    tmdbId: number,
-    seasonNumber: number,
-    episodeNumber: number,
-    watched: boolean
-  ) => void
-}) {
-  useEffect(() => {
-    const abortController = new AbortController()
-
-    void fetchTmdbTvSeasonDetail({
-      apiKey: tmdbApiKey,
-      tmdbId,
-      seasonNumber: selectedSeason,
-      signal: abortController.signal,
-    })
-      .then((season) => {
-        if (abortController.signal.aborted) {
-          return
-        }
-
-        onSeasonStateChange({
-          status: "success",
-          season,
-          message: null,
-        })
-
-        const firstEpisode = season.episodes[0]?.episodeNumber ?? null
-        onSelectedEpisodeChange(firstEpisode)
-        onSourceStateChange(
-          firstEpisode === null
-            ? {
-                status: "idle",
-                sources: [],
-                message: null,
-              }
-            : {
-                status: "loading",
-                sources: [],
-                message: null,
-              }
-        )
-      })
-      .catch((error: unknown) => {
-        if (abortController.signal.aborted) {
-          return
-        }
-
-        onSeasonStateChange({
-          status: "error",
-          season: null,
-          message:
-            error instanceof Error ? error.message : "Could not load season",
-        })
-      })
-
-    return () => {
-      abortController.abort()
-    }
-  }, [
-    onSeasonStateChange,
-    onSelectedEpisodeChange,
-    onSourceStateChange,
-    selectedSeason,
-    tmdbApiKey,
-    tmdbId,
-  ])
-
-  useEffect(() => {
-    if (realDebridState.status !== "success" || selectedEpisode === null) {
-      return
-    }
-
-    if (selectedEpisode === null) {
-      return
-    }
-
-    const abortController = new AbortController()
-
-    void fetchTmdbExternalIds({
-      apiKey: tmdbApiKey,
-      mediaType: "tv",
-      tmdbId,
-      signal: abortController.signal,
-    })
-      .then((externalIds) => {
-        if (!externalIds.imdbId) {
-          throw new Error("IMDb ID not found")
-        }
-
-        return fetchTorrentioEpisodeSources({
-          imdbId: externalIds.imdbId,
-          seasonNumber: selectedSeason,
-          episodeNumber: selectedEpisode,
-          realDebridApiKey,
-          signal: abortController.signal,
-        })
-      })
-      .then((sources) => {
-        if (abortController.signal.aborted) {
-          return
-        }
-
-        onSourceStateChange({
-          status: "success",
-          sources,
-          message: null,
-        })
-      })
-      .catch((error: unknown) => {
-        if (abortController.signal.aborted) {
-          return
-        }
-
-        onSourceStateChange({
-          status: "error",
-          sources: [],
-          message:
-            error instanceof Error ? error.message : "Could not load sources",
-        })
-      })
-
-    return () => {
-      abortController.abort()
-    }
-  }, [
-    onSourceStateChange,
-    realDebridState.status,
-    realDebridApiKey,
-    selectedEpisode,
-    selectedSeason,
-    tmdbApiKey,
-    tmdbId,
-  ])
+  const isMovie = mediaType === "movie"
+  const backdropUrl = getTmdbImageUrl(detail?.backdropPath ?? null, "w1280")
+  const posterUrl = getTmdbImageUrl(detail?.posterPath ?? null, "w500")
+  const movieWatched = watchProgress?.mediaType === "movie"
+  const watchedEpisodeCount = getWatchedEpisodeCount(watchProgress)
 
   return (
-    <>
-      <EpisodeSelector
-        selectedSeason={selectedSeason}
-        seasonState={seasonState}
-        selectedEpisode={selectedEpisode}
-        watchProgress={watchProgress}
-        onSelect={(episodeNumber) => {
-          onSourceStateChange({
-            status: "loading",
-            sources: [],
-            message: null,
-          })
-          onSelectedEpisodeChange(episodeNumber)
-        }}
-        onToggleWatched={(episodeNumber, watched) => {
-          onMarkEpisodeWatched(tmdbId, selectedSeason, episodeNumber, watched)
-        }}
-      />
-      <SourceResultsPanel
-        title="Sources"
-        status={
-          realDebridState.status === "success"
-            ? sourceState.status
-            : realDebridState.status === "loading"
-              ? "loading"
-              : "error"
-        }
-        sources={sourceState.sources}
-        message={
-          realDebridState.status === "error"
-            ? realDebridState.message
-            : sourceState.message
-        }
-      />
-    </>
-  )
-}
-
-function EpisodeSelector({
-  selectedSeason,
-  seasonState,
-  selectedEpisode,
-  watchProgress,
-  onSelect,
-  onToggleWatched,
-}: {
-  selectedSeason: number
-  seasonState: SeasonState
-  selectedEpisode: number | null
-  watchProgress: MediaWatchProgress | undefined
-  onSelect: (episodeNumber: number) => void
-  onToggleWatched: (episodeNumber: number, watched: boolean) => void
-}) {
-  return (
-    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
-      <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
-        Episodes
-      </p>
-
-      {seasonState.status === "loading" ? <StateCard label="Loading" /> : null}
-      {seasonState.status === "error" ? (
-        <StateCard label={seasonState.message ?? "Could not load episodes"} />
-      ) : null}
-      {seasonState.status === "success" &&
-      seasonState.season?.episodes.length === 0 ? (
-        <StateCard label="No episodes found" />
-      ) : null}
-
-      {seasonState.status === "success" && seasonState.season ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {seasonState.season.episodes.map((episode) => (
-            <EpisodeCard
-              key={episode.id}
-              seasonNumber={selectedSeason}
-              episode={episode}
-              isSelected={episode.episodeNumber === selectedEpisode}
-              isWatched={isEpisodeWatched(
-                watchProgress,
-                selectedSeason,
-                episode.episodeNumber
-              )}
-              onSelect={onSelect}
-              onToggleWatched={onToggleWatched}
-            />
-          ))}
-        </div>
-      ) : null}
-    </section>
-  )
-}
-
-function EpisodeCard({
-  seasonNumber,
-  episode,
-  isSelected,
-  isWatched,
-  onSelect,
-  onToggleWatched,
-}: {
-  seasonNumber: number
-  episode: TvEpisodeDetail
-  isSelected: boolean
-  isWatched: boolean
-  onSelect: (episodeNumber: number) => void
-  onToggleWatched: (episodeNumber: number, watched: boolean) => void
-}) {
-  return (
-    <article
-      className={`grid gap-3 rounded-[24px] border p-4 text-left transition-colors ${
-        isSelected
-          ? "border-primary/40 bg-primary/10"
-          : "border-border/70 bg-background/70 hover:border-primary/30"
-      }`}
-    >
-      <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-[0.16em] text-muted-foreground uppercase">
-        <span>Episode {episode.episodeNumber}</span>
-        <span>Season {seasonNumber}</span>
-        {episode.airDate ? <span>{formatDate(episode.airDate)}</span> : null}
-        {isWatched ? (
-          <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-emerald-700">
-            Watched
-          </span>
-        ) : null}
-      </div>
-      <p className="text-sm font-medium text-foreground">{episode.title}</p>
-      <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-        {episode.runtime ? <FactTag value={`${episode.runtime} min`} /> : null}
-        {episode.voteAverage !== null ? (
-          <FactTag value={`${episode.voteAverage.toFixed(1)} / 10`} />
-        ) : null}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant={isSelected ? "default" : "outline"}
-          size="sm"
-          className="rounded-2xl"
-          onClick={() => onSelect(episode.episodeNumber)}
-        >
-          {isSelected ? "Selected" : "Open sources"}
-        </Button>
-        <Button
-          type="button"
-          variant={isWatched ? "secondary" : "outline"}
-          size="sm"
-          className="rounded-2xl"
-          onClick={() => onToggleWatched(episode.episodeNumber, !isWatched)}
-        >
-          {isWatched ? "Unwatch" : "Mark watched"}
-        </Button>
-      </div>
-    </article>
-  )
-}
-
-function FactTag({ value }: { value: string }) {
-  return (
-    <span className="rounded-full border border-border/70 bg-card px-2.5 py-1 font-medium text-foreground">
-      {value}
-    </span>
-  )
-}
-
-function StateCard({ label }: { label: string }) {
-  return (
-    <div className="rounded-[24px] border border-border/70 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-      {label}
-    </div>
-  )
-}
-
-function MovieSourceSection({
-  tmdbId,
-  tmdbApiKey,
-  realDebridApiKey,
-  state,
-  onStateChange,
-}: {
-  tmdbId: number
-  tmdbApiKey: string
-  realDebridApiKey: string
-  state: SourceState
-  onStateChange: Dispatch<SetStateAction<SourceState>>
-}) {
-  useEffect(() => {
-    const abortController = new AbortController()
-
-    void fetchTmdbExternalIds({
-      apiKey: tmdbApiKey,
-      mediaType: "movie",
-      tmdbId,
-      signal: abortController.signal,
-    })
-      .then((externalIds) => {
-        if (!externalIds.imdbId) {
-          throw new Error("IMDb ID not found")
-        }
-
-        return fetchTorrentioMovieSources({
-          imdbId: externalIds.imdbId,
-          realDebridApiKey,
-          signal: abortController.signal,
-        })
-      })
-      .then((sources) => {
-        if (abortController.signal.aborted) {
-          return
-        }
-
-        onStateChange({
-          status: "success",
-          sources,
-          message: null,
-        })
-      })
-      .catch((error: unknown) => {
-        if (abortController.signal.aborted) {
-          return
-        }
-
-        onStateChange({
-          status: "error",
-          sources: [],
-          message:
-            error instanceof Error ? error.message : "Could not load sources",
-        })
-      })
-
-    return () => {
-      abortController.abort()
-    }
-  }, [onStateChange, realDebridApiKey, tmdbApiKey, tmdbId])
-
-  return (
-    <SourceResultsPanel
-      title="Sources"
-      status={state.status}
-      sources={state.sources}
-      message={state.message}
-    />
-  )
-}
-
-function DetailCard({ detail }: { detail: MediaDetail }) {
-  const posterUrl = getTmdbImageUrl(detail.posterPath, "w500")
-  const backdropUrl = getTmdbImageUrl(detail.backdropPath, "w1280")
-  const facts = buildFacts(detail)
-
-  return (
-    <section className="overflow-hidden rounded-[32px] border border-border/70 bg-card/85 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur">
-      <div className="relative border-b border-border/70">
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(10,24,21,0.75),rgba(10,24,21,0.3))]" />
+    <div>
+      {/* hero */}
+      <div className="relative h-[280px] overflow-hidden bg-secondary sm:h-[340px]">
         {backdropUrl ? (
           <Image
             src={backdropUrl}
             alt=""
-            width={1280}
-            height={720}
-            className="h-40 w-full object-cover sm:h-48 lg:h-56"
+            fill
+            sizes="100vw"
+            className="object-cover"
+            priority
           />
-        ) : (
-          <div className="h-40 bg-[radial-gradient(circle_at_top_left,rgba(208,237,225,0.9),transparent_34%),radial-gradient(circle_at_top_right,rgba(243,219,180,0.72),transparent_28%),linear-gradient(180deg,#dce9df_0%,#efe7d7_100%)] sm:h-48 lg:h-56" />
-        )}
-        <div className="absolute inset-x-0 bottom-0 p-5 text-white sm:p-6 lg:p-7">
-          <div className="flex flex-wrap items-center gap-2 text-[11px] font-semibold tracking-[0.18em] text-white/78 uppercase">
-            <span>{detail.mediaType === "movie" ? "Movie" : "TV show"}</span>
-            {detail.year ? <span>{detail.year}</span> : null}
-            {detail.status ? <span>{detail.status}</span> : null}
-          </div>
-          <h1 className="mt-3 max-w-3xl text-3xl font-semibold tracking-[-0.04em] text-white sm:text-4xl lg:text-[2.8rem]">
-            {detail.title}
-          </h1>
-          {detail.tagline ? (
-            <p className="mt-2 max-w-2xl text-sm text-white/78 lg:text-[0.95rem]">
-              {detail.tagline}
-            </p>
-          ) : null}
+        ) : null}
+        <div className="absolute inset-0 bg-[linear-gradient(to_top,var(--background)_4%,transparent_72%)]" />
+        <div className="absolute top-6 left-6 flex items-center gap-3 sm:left-11">
+          <Link
+            href="/search"
+            className="rounded-lg border border-border bg-background/55 px-3 py-2 font-mono text-[11px] text-foreground backdrop-blur transition-colors hover:bg-secondary"
+          >
+            ← back to search
+          </Link>
+          <span className="rounded-lg border border-border bg-background/55 px-3 py-2 font-mono text-[11px] text-muted-foreground backdrop-blur">
+            TMDB {tmdbId}
+          </span>
         </div>
       </div>
 
-      <div className="grid gap-6 p-5 md:grid-cols-[200px_minmax(0,1fr)] md:p-6 xl:grid-cols-[180px_minmax(0,1fr)] 2xl:grid-cols-[200px_minmax(0,1fr)]">
-        <div className="mx-auto w-full max-w-[240px] overflow-hidden rounded-[26px] border border-border/70 bg-[linear-gradient(145deg,rgba(208,237,225,0.42),rgba(243,219,180,0.35))] md:mx-0 md:max-w-none">
-          {posterUrl ? (
-            <Image
-              src={posterUrl}
-              alt={`Poster for ${detail.title}`}
-              width={500}
-              height={750}
-              className="aspect-[2/3] h-full w-full object-cover"
-            />
+      <div className="relative -mt-28 flex max-w-[1180px] flex-col gap-9 px-6 pb-14 sm:flex-row sm:px-12">
+        {/* poster + actions */}
+        <div className="w-[200px] flex-none sm:w-[240px]">
+          <div className="relative aspect-[2/3] overflow-hidden rounded-[14px] border border-border bg-secondary shadow-[var(--shadow)]">
+            {posterUrl ? (
+              <Image
+                src={posterUrl}
+                alt={detail ? `Poster for ${detail.title}` : ""}
+                fill
+                sizes="240px"
+                className="object-cover"
+              />
+            ) : null}
+          </div>
+          <div className="mt-4 flex flex-col gap-[9px]">
+            <button
+              type="button"
+              onClick={() =>
+                router.push(
+                  isMovie
+                    ? `/media/movie/${tmdbId}/sources`
+                    : `/media/tv/${tmdbId}/episodes`
+                )
+              }
+              className="rounded-[11px] bg-primary px-3 py-3.5 text-[14px] font-bold text-primary-foreground transition-opacity hover:opacity-90"
+            >
+              {isMovie ? "▸ Open sources" : "▸ View episodes"}
+            </button>
+            {isMovie ? (
+              <button
+                type="button"
+                onClick={() => markMovieWatched(tmdbId, !movieWatched)}
+                className="rounded-[11px] border border-border bg-secondary px-3 py-[13px] text-[13.5px] font-semibold text-foreground transition-colors hover:bg-secondary/70"
+              >
+                {movieWatched ? "✓ Watched" : "＋ Mark as watched"}
+              </button>
+            ) : (
+              <div className="flex items-center justify-between rounded-[11px] border border-border px-3.5 py-3 text-[13px] text-foreground">
+                <span>
+                  {watchedEpisodeCount > 0
+                    ? `${watchedEpisodeCount} episodes watched`
+                    : "Not started"}
+                </span>
+                <span
+                  className={cn(
+                    "size-2 rounded-full",
+                    watchedEpisodeCount > 0 ? "bg-success" : "bg-faint"
+                  )}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* info */}
+        <div className="min-w-0 flex-1 pt-2 sm:pt-[150px]">
+          {detail ? (
+            <>
+              <div className="mb-3 flex flex-wrap items-center gap-2.5">
+                <span className="rounded-md bg-primary px-[9px] py-1 font-mono text-[10px] tracking-[0.06em] text-primary-foreground">
+                  {isMovie ? "FILM" : "TV SERIES"}
+                </span>
+                {detail.year ? (
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {detail.year}
+                  </span>
+                ) : null}
+                {detail.status ? (
+                  <>
+                    <span className="size-1 rounded-full bg-faint" />
+                    <span className="font-mono text-[11px] text-success">
+                      {detail.status}
+                    </span>
+                  </>
+                ) : null}
+              </div>
+              <h1 className="display text-[40px] leading-[0.96] sm:text-[52px]">
+                {detail.title}
+              </h1>
+              {detail.overview ? (
+                <p className="mt-5 max-w-[62ch] text-[15px] leading-[1.6] text-muted-foreground">
+                  {detail.overview}
+                </p>
+              ) : null}
+
+              <FactsGrid detail={detail} />
+
+              {detail.genres.length > 0 || detail.creators.length > 0 ? (
+                <div className="mt-6 flex flex-wrap items-center gap-2">
+                  {detail.genres.map((genre) => (
+                    <span
+                      key={genre}
+                      className="rounded-[20px] border border-border px-3.5 py-[7px] text-[12.5px] text-muted-foreground"
+                    >
+                      {genre}
+                    </span>
+                  ))}
+                  {detail.creators.length > 0 ||
+                  detail.productionCompanies.length > 0 ? (
+                    <>
+                      <span className="mx-1 h-5 w-px bg-border" />
+                      <span className="font-mono text-[11px] text-faint">
+                        {isMovie ? "DIRECTED BY" : "STUDIO"}
+                      </span>
+                      <span className="rounded-[20px] border border-border px-3.5 py-[7px] text-[12.5px] text-foreground">
+                        {(detail.creators[0] ??
+                          detail.productionCompanies[0]) ||
+                          "—"}
+                      </span>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {mediaType === "tv" ? (
+                <AnimeTrackingSection
+                  tmdbId={tmdbId}
+                  title={detail.title}
+                  year={detail.year}
+                />
+              ) : null}
+            </>
           ) : (
-            <div className="flex aspect-[2/3] items-end p-4">
-              <span className="rounded-full border border-border/70 bg-background/85 px-3 py-1 text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-                No poster
-              </span>
-            </div>
+            <p className="font-mono text-[12px] text-faint">
+              {state.status === "error" ? state.message : "Loading…"}
+            </p>
           )}
         </div>
+      </div>
+    </div>
+  )
+}
 
-        <div className="grid gap-6 xl:max-w-5xl">
-          {detail.overview ? (
-            <section>
-              <h2 className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
-                Overview
-              </h2>
-              <p className="mt-3 max-w-4xl text-sm leading-7 text-muted-foreground">
-                {detail.overview}
-              </p>
-            </section>
-          ) : null}
+function FactsGrid({ detail }: { detail: MediaDetailType }) {
+  const facts = buildFacts(detail)
 
-          {facts.length > 0 ? (
-            <section>
-              <h2 className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
-                Facts
-              </h2>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {facts.map((fact) => (
-                  <article
-                    key={fact.label}
-                    className="rounded-[24px] border border-border/70 bg-background/70 p-4"
-                  >
-                    <p className="text-[11px] font-semibold tracking-[0.18em] text-muted-foreground uppercase">
-                      {fact.label}
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-foreground">
-                      {fact.value}
-                    </p>
-                  </article>
-                ))}
-              </div>
-            </section>
-          ) : null}
+  if (facts.length === 0) {
+    return null
+  }
 
-          {detail.genres.length > 0 ? (
-            <TagSection title="Genres" items={detail.genres} />
-          ) : null}
-
-          {detail.creators.length > 0 ? (
-            <TagSection title="Created by" items={detail.creators} />
-          ) : null}
-
-          {detail.productionCompanies.length > 0 ? (
-            <TagSection title="Studios" items={detail.productionCompanies} />
-          ) : null}
+  return (
+    <div className="mt-7 grid grid-cols-2 gap-px overflow-hidden rounded-[13px] border border-border bg-border sm:grid-cols-4">
+      {facts.map((fact) => (
+        <div key={fact.label} className="bg-background px-[17px] py-[15px]">
+          <div className="font-mono text-[10px] text-faint">{fact.label}</div>
+          <div className="mt-[5px] text-[15px] font-semibold">{fact.value}</div>
         </div>
-      </div>
-    </section>
-  )
-}
-
-function TagSection({ title, items }: { title: string; items: string[] }) {
-  return (
-    <section>
-      <h2 className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
-        {title}
-      </h2>
-      <div className="mt-3 flex flex-wrap gap-2">
-        {items.map((item) => (
-          <span
-            key={item}
-            className="rounded-full border border-border/70 bg-background/70 px-3 py-1.5 text-xs font-medium text-foreground"
-          >
-            {item}
-          </span>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function SkeletonCard({
-  mediaType,
-  tmdbId,
-}: {
-  mediaType: SearchMediaType
-  tmdbId: number
-}) {
-  return (
-    <section className="rounded-[32px] border border-border/70 bg-card/85 p-6 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.45)] backdrop-blur">
-      <div className="flex flex-wrap gap-2 text-xs font-medium tracking-[0.18em] text-muted-foreground uppercase">
-        <span>{mediaType === "movie" ? "Movie" : "TV show"}</span>
-        <span>TMDB {tmdbId}</span>
-      </div>
-    </section>
-  )
-}
-
-function StatusCard({ label }: { label: string }) {
-  return (
-    <section className="rounded-[24px] border border-border/70 bg-card/80 px-4 py-3 text-sm text-muted-foreground shadow-[0_18px_80px_-42px_rgba(18,38,33,0.35)]">
-      {label}
-    </section>
-  )
-}
-
-function MovieTrackingSection({
-  isWatched,
-  onSetWatched,
-}: {
-  isWatched: boolean
-  onSetWatched: (watched: boolean) => void
-}) {
-  return (
-    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
-            Tracking
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {isWatched ? "Marked as watched locally." : "Not watched yet."}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant={isWatched ? "secondary" : "default"}
-          className="rounded-2xl"
-          onClick={() => onSetWatched(!isWatched)}
-        >
-          {isWatched ? "Mark unwatched" : "Mark watched"}
-        </Button>
-      </div>
-    </section>
-  )
-}
-
-function TvTrackingSummary({
-  totalEpisodeCount,
-  watchedEpisodeCount,
-}: {
-  totalEpisodeCount: number | null
-  watchedEpisodeCount: number
-}) {
-  return (
-    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
-            Tracking
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
-            {buildTvTrackingLabel(watchedEpisodeCount, totalEpisodeCount)}
-          </p>
-        </div>
-        <span className="rounded-full border border-border/70 bg-background/70 px-3 py-1 text-xs font-medium text-foreground">
-          {totalEpisodeCount
-            ? `${watchedEpisodeCount}/${totalEpisodeCount} watched`
-            : `${watchedEpisodeCount} watched`}
-        </span>
-      </div>
-    </section>
+      ))}
+    </div>
   )
 }
 
@@ -1004,23 +309,18 @@ function AnimeTrackingSection({
   const [status, setStatus] = useState<
     "idle" | "searching" | "no-match" | "error"
   >("idle")
-  const [pickerResults, setPickerResults] = useState<AnilistMedia[] | null>(
-    null
-  )
+  const [pickerResults, setPickerResults] = useState<AnilistMedia[] | null>(null)
 
   const handleAdd = async () => {
     setStatus("searching")
     setPickerResults(null)
-
     try {
       const results = await searchAnilistAnime(title)
       const best = pickBestAnilistMatch(results, year)
-
       if (!best) {
         setStatus("no-match")
         return
       }
-
       addItem({
         anilistId: best.id,
         tmdbId,
@@ -1035,7 +335,6 @@ function AnimeTrackingSection({
 
   const handleOpenPicker = async () => {
     setStatus("searching")
-
     try {
       const results = await searchAnilistAnime(title)
       setPickerResults(results)
@@ -1061,123 +360,116 @@ function AnimeTrackingSection({
   }
 
   return (
-    <section className="grid gap-4 rounded-[30px] border border-border/70 bg-card/85 p-5 shadow-[0_18px_80px_-38px_rgba(18,38,33,0.38)] md:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold tracking-[0.22em] text-primary/80 uppercase">
-            My list
-          </p>
-          <p className="mt-2 text-sm text-muted-foreground">
+    <div className="mt-7 rounded-[14px] border border-border bg-card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="size-[7px] flex-none rounded-full bg-success" />
+          <span className="font-mono text-[11px] tracking-[0.05em] text-foreground">
+            ANILIST · {tracked ? "MATCHED" : "NOT TRACKED"}
+          </span>
+          <span className="truncate text-[13px] text-muted-foreground">
             {tracked
-              ? `Tracking via AniList: ${tracked.title}`
+              ? tracked.title
               : status === "searching"
-                ? "Searching AniList…"
+                ? "searching…"
                 : status === "no-match"
-                  ? "No AniList anime match found."
+                  ? "no anime match found"
                   : status === "error"
-                    ? "Could not reach AniList. Try again."
-                    : "Not in your list yet."}
-          </p>
+                    ? "could not reach AniList"
+                    : "add this anime to track airing"}
+          </span>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex gap-2">
           {tracked ? (
             <>
-              <Button
+              <button
                 type="button"
-                variant="outline"
-                className="rounded-2xl"
                 onClick={handleOpenPicker}
                 disabled={status === "searching"}
+                className="rounded-[9px] border border-border bg-secondary px-[15px] py-[9px] text-[12.5px] font-semibold text-foreground transition-colors hover:bg-secondary/70 disabled:opacity-50"
               >
                 Change match
-              </Button>
-              <Button
+              </button>
+              <button
                 type="button"
-                variant="secondary"
-                className="rounded-2xl"
                 onClick={() => {
                   removeItem(tmdbId)
                   setPickerResults(null)
                   setStatus("idle")
                 }}
+                className="rounded-[9px] border border-border px-[15px] py-[9px] text-[12.5px] font-semibold text-primary transition-colors hover:bg-primary/10"
               >
-                Remove
-              </Button>
+                Remove from list
+              </button>
             </>
           ) : (
-            <Button
+            <button
               type="button"
-              className="rounded-2xl"
               onClick={handleAdd}
               disabled={status === "searching"}
+              className="rounded-[9px] bg-primary px-[15px] py-[9px] text-[12.5px] font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
             >
               Add to my list
-            </Button>
+            </button>
           )}
         </div>
       </div>
 
       {pickerResults && pickerResults.length > 0 ? (
-        <div className="grid gap-2">
-          <p className="text-xs font-medium text-muted-foreground">
-            Pick the matching AniList entry:
+        <div className="mt-4 grid gap-2">
+          <p className="font-mono text-[10px] tracking-[0.05em] text-faint">
+            PICK THE MATCHING ANILIST ENTRY
           </p>
           {pickerResults.map((media) => (
             <button
               key={media.id}
               type="button"
               onClick={() => handlePick(media)}
-              className="flex items-center justify-between gap-3 rounded-2xl border border-border/70 bg-background/70 px-4 py-2 text-left text-sm transition-colors hover:border-primary/40 hover:bg-background"
+              className="flex items-center justify-between gap-3 rounded-[9px] border border-border bg-background px-4 py-2.5 text-left text-sm transition-colors hover:border-primary/50"
             >
               <span className="min-w-0 truncate text-foreground">
                 {media.title}
               </span>
-              <span className="shrink-0 text-xs text-muted-foreground">
+              <span className="shrink-0 font-mono text-[11px] text-faint">
                 {[media.format, media.seasonYear].filter(Boolean).join(" · ")}
               </span>
             </button>
           ))}
         </div>
       ) : null}
-    </section>
+    </div>
   )
 }
 
-function buildFacts(detail: MediaDetail) {
+function buildFacts(detail: MediaDetailType) {
   const facts: Array<{ label: string; value: string }> = []
 
   if (detail.releaseDate) {
-    facts.push({ label: "Release", value: formatDate(detail.releaseDate) })
+    facts.push({ label: "RELEASE", value: formatDate(detail.releaseDate) })
   }
-
-  if (detail.runtime) {
-    facts.push({ label: "Runtime", value: `${detail.runtime} min` })
-  }
-
   if (detail.voteAverage !== null) {
-    facts.push({
-      label: "Rating",
-      value: `${detail.voteAverage.toFixed(1)} / 10`,
-    })
+    facts.push({ label: "RATING", value: `★ ${detail.voteAverage.toFixed(1)}` })
   }
-
-  if (detail.voteCount > 0) {
-    facts.push({ label: "Votes", value: detail.voteCount.toLocaleString() })
+  if (detail.runtime) {
+    facts.push({ label: "RUNTIME", value: `${detail.runtime} min` })
   }
-
-  if (detail.originalTitle && detail.originalTitle !== detail.title) {
-    facts.push({ label: "Original", value: detail.originalTitle })
+  if (detail.status) {
+    facts.push({ label: "STATUS", value: detail.status })
   }
-
   if (detail.seasonCount) {
-    facts.push({ label: "Seasons", value: String(detail.seasonCount) })
+    facts.push({ label: "SEASONS", value: String(detail.seasonCount) })
   }
-
   if (detail.episodeCount) {
-    facts.push({ label: "Episodes", value: String(detail.episodeCount) })
+    facts.push({ label: "EPISODES", value: String(detail.episodeCount) })
+  }
+  if (detail.voteCount > 0) {
+    facts.push({ label: "VOTES", value: detail.voteCount.toLocaleString() })
+  }
+  if (detail.originalTitle && detail.originalTitle !== detail.title) {
+    facts.push({ label: "ORIGINAL", value: detail.originalTitle })
   }
 
-  return facts
+  return facts.slice(0, 8)
 }
 
 function formatDate(value: string) {
@@ -1192,23 +484,4 @@ function formatDate(value: string) {
     month: "short",
     day: "numeric",
   }).format(parsedDate)
-}
-
-function buildTvTrackingLabel(
-  watchedEpisodeCount: number,
-  totalEpisodeCount: number | null
-) {
-  if (totalEpisodeCount && watchedEpisodeCount >= totalEpisodeCount) {
-    return "Every known episode is marked as watched locally."
-  }
-
-  if (watchedEpisodeCount === 0) {
-    return "No episode has been marked as watched yet."
-  }
-
-  if (totalEpisodeCount) {
-    return `${watchedEpisodeCount} of ${totalEpisodeCount} episodes are marked as watched locally.`
-  }
-
-  return `${watchedEpisodeCount} episodes are marked as watched locally.`
 }
