@@ -14,6 +14,7 @@ import { getWatchedEpisodeCount } from "@/lib/watch-progress"
 export function AiringView() {
   const { items, mediaById, airing, status } = useAiring()
   const { getItem } = useWatchProgress()
+  const isLoading = status === "loading" && items.length > 0
 
   const inProgress = items
     .map((tracked) => ({
@@ -30,14 +31,25 @@ export function AiringView() {
         <h1 className="display text-[40px]">Airing</h1>
       </div>
       <div className="mt-2.5 font-mono text-[11px] text-faint">
-        {airing.length > 0
-          ? `${airing.length} tracked anime with an upcoming episode · sorted by air time`
-          : status === "error"
-            ? "Could not reach AniList for airing schedules."
-            : "No tracked anime is currently airing."}
+        {isLoading
+          ? "Loading airing schedules…"
+          : airing.length > 0
+            ? `${airing.length} tracked anime with an upcoming episode · sorted by air time`
+            : status === "error"
+              ? "Could not reach AniList for airing schedules."
+              : "No tracked anime is currently airing."}
       </div>
 
-      {airing.length > 0 ? (
+      {isLoading ? (
+        <div className="mt-9 flex flex-col gap-3.5">
+          {Array.from(
+            { length: Math.min(Math.max(items.length, 1), 4) },
+            (_, index) => (
+              <AiringRowSkeleton key={index} />
+            )
+          )}
+        </div>
+      ) : airing.length > 0 ? (
         <div className="mt-9 flex flex-col gap-3.5">
           {airing.map((entry) => (
             <AiringRow key={entry.tracked.anilistId} entry={entry} />
@@ -105,6 +117,19 @@ function AiringRow({ entry }: { entry: AiringEntry }) {
         </div>
       </div>
     </Link>
+  )
+}
+
+function AiringRowSkeleton() {
+  return (
+    <div className="flex items-center gap-[22px] rounded-[15px] border border-l-[3px] border-border border-l-primary/40 bg-card px-[22px] py-[18px]">
+      <div className="h-20 w-14 flex-none animate-pulse rounded-[9px] bg-secondary" />
+      <div className="min-w-0 flex-1 space-y-2.5">
+        <div className="h-5 w-1/2 animate-pulse rounded bg-secondary" />
+        <div className="h-4 w-16 animate-pulse rounded bg-secondary" />
+      </div>
+      <div className="h-7 w-24 flex-none animate-pulse rounded bg-secondary" />
+    </div>
   )
 }
 

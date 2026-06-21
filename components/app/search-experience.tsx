@@ -366,9 +366,14 @@ function PosterCard({
 }
 
 function AiringStrip() {
-  const { airing } = useAiring()
+  const { items, airing, status } = useAiring()
 
-  if (airing.length === 0) {
+  // While AniList loads, reserve space with skeletons so the section doesn't
+  // pop in. Tracked count is known synchronously from localStorage.
+  const isLoading = status === "loading" && items.length > 0
+  const skeletonCount = Math.min(Math.max(items.length, 1), 3)
+
+  if (!isLoading && airing.length === 0) {
     return null
   }
 
@@ -382,9 +387,28 @@ function AiringStrip() {
         <span className="h-px flex-1 bg-border" />
       </div>
       <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
-        {airing.slice(0, 6).map((entry) => (
-          <AiringStripCard key={entry.tracked.anilistId} entry={entry} />
-        ))}
+        {isLoading
+          ? Array.from({ length: skeletonCount }, (_, index) => (
+              <AiringStripSkeleton key={index} />
+            ))
+          : airing
+              .slice(0, 6)
+              .map((entry) => (
+                <AiringStripCard key={entry.tracked.anilistId} entry={entry} />
+              ))}
+      </div>
+    </div>
+  )
+}
+
+function AiringStripSkeleton() {
+  return (
+    <div className="flex items-center gap-3.5 rounded-[13px] border border-l-2 border-border border-l-primary/40 bg-card p-3.5">
+      <div className="h-[62px] w-[46px] flex-none animate-pulse rounded-[7px] bg-secondary" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="h-3.5 w-3/4 animate-pulse rounded bg-secondary" />
+        <div className="h-2.5 w-10 animate-pulse rounded bg-secondary" />
+        <div className="h-3 w-20 animate-pulse rounded bg-secondary" />
       </div>
     </div>
   )
