@@ -512,19 +512,12 @@ function buildCardProgress(
   progress: MediaWatchProgress | undefined,
   anime: AnimeAiringInfo | undefined
 ): { label: string; tone: string } | null {
-  if (!progress) {
-    return null
-  }
-
-  if (progress.mediaType === "movie") {
+  if (progress?.mediaType === "movie") {
     return { label: "Watched", tone: "text-success" }
   }
 
-  const count = getWatchedEpisodeCount(progress)
-
-  if (count === 0) {
-    return null
-  }
+  const count =
+    progress?.mediaType === "tv" ? getWatchedEpisodeCount(progress) : 0
 
   if (anime?.next) {
     const aired = Math.max(anime.next.episode - 1, count)
@@ -539,5 +532,6 @@ function buildCardProgress(
     return { label: `${count}/${anime.total} watched`, tone: "text-faint" }
   }
 
-  return { label: `${count} watched`, tone: "text-faint" }
+  // Untracked show with no AniList total: only show once there's progress.
+  return count > 0 ? { label: `${count} watched`, tone: "text-faint" } : null
 }
