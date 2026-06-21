@@ -382,6 +382,14 @@ function AnimeTrackingSection({
         <div className="flex gap-2">
           {tracked ? (
             <>
+              <a
+                href={`https://anilist.co/anime/${tracked.anilistId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-[9px] border border-border bg-secondary px-[15px] py-[9px] text-[12.5px] font-semibold text-foreground transition-colors hover:bg-secondary/70"
+              >
+                View on AniList ↗
+              </a>
               <button
                 type="button"
                 onClick={handleOpenPicker}

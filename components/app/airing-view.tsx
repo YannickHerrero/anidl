@@ -85,29 +85,33 @@ function AiringRow({ entry }: { entry: AiringEntry }) {
   const secondsUntil = useCountdown(entry.airingAt)
 
   return (
-    <Link
-      href={`/media/tv/${entry.tracked.tmdbId}`}
-      className="flex items-center gap-[22px] rounded-[15px] border border-l-[3px] border-border border-l-primary bg-card px-[22px] py-[18px] transition-transform duration-150 hover:translate-x-1"
-    >
-      <div className="relative h-20 w-14 flex-none overflow-hidden rounded-[9px] bg-secondary">
-        {entry.tracked.coverImage ? (
-          <Image
-            src={entry.tracked.coverImage}
-            alt=""
-            fill
-            sizes="56px"
-            className="object-cover"
-          />
-        ) : null}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="display truncate text-[22px]">{entry.tracked.title}</div>
-        <div className="mt-[7px] flex items-center gap-3">
-          <span className="rounded-md bg-primary px-[9px] py-[3px] font-mono text-[11px] text-primary-foreground">
-            EP {entry.episode}
-          </span>
+    <div className="flex items-center gap-[22px] rounded-[15px] border border-l-[3px] border-border border-l-primary bg-card px-[22px] py-[18px] transition-transform duration-150 hover:translate-x-1">
+      <Link
+        href={`/media/tv/${entry.tracked.tmdbId}`}
+        className="flex min-w-0 flex-1 items-center gap-[22px]"
+      >
+        <div className="relative h-20 w-14 flex-none overflow-hidden rounded-[9px] bg-secondary">
+          {entry.tracked.coverImage ? (
+            <Image
+              src={entry.tracked.coverImage}
+              alt=""
+              fill
+              sizes="56px"
+              className="object-cover"
+            />
+          ) : null}
         </div>
-      </div>
+        <div className="min-w-0 flex-1">
+          <div className="display truncate text-[22px]">
+            {entry.tracked.title}
+          </div>
+          <div className="mt-[7px] flex items-center gap-3">
+            <span className="rounded-md bg-primary px-[9px] py-[3px] font-mono text-[11px] text-primary-foreground">
+              EP {entry.episode}
+            </span>
+          </div>
+        </div>
+      </Link>
       <div className="flex-none text-right">
         <div className="font-mono text-[9px] tracking-[0.1em] text-faint">
           AIRS IN
@@ -116,7 +120,16 @@ function AiringRow({ entry }: { entry: AiringEntry }) {
           {formatCountdown(secondsUntil)}
         </div>
       </div>
-    </Link>
+      <a
+        href={`https://anilist.co/anime/${entry.tracked.anilistId}`}
+        target="_blank"
+        rel="noreferrer"
+        aria-label={`Open ${entry.tracked.title} on AniList`}
+        className="flex-none rounded-[9px] border border-border px-3 py-2 font-mono text-[12px] text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+      >
+        AniList ↗
+      </a>
+    </div>
   )
 }
 
