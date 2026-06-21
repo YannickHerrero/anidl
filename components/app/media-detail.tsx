@@ -182,9 +182,11 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
             ) : (
               <div className="flex items-center justify-between rounded-[11px] border border-border px-3.5 py-3 text-[13px] text-foreground">
                 <span>
-                  {watchedEpisodeCount > 0
-                    ? `${watchedEpisodeCount} episodes watched`
-                    : "Not started"}
+                  {watchedEpisodeCount === 0
+                    ? "Not started"
+                    : detail?.episodeCount
+                      ? `${watchedEpisodeCount}/${detail.episodeCount} watched`
+                      : `${watchedEpisodeCount} episodes watched`}
                 </span>
                 <span
                   className={cn(

@@ -10,7 +10,7 @@ import { useAiring } from "@/hooks/use-airing"
 import { useCountdown } from "@/hooks/use-countdown"
 import { useRecentMedia } from "@/hooks/use-recent-media"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
-import { formatCountdown } from "@/lib/anilist"
+import { formatCountdown, type AnilistAiringEpisode } from "@/lib/anilist"
 import {
   getTmdbImageUrl,
   searchTmdbMedia,
@@ -51,6 +51,20 @@ export function SearchExperience() {
   const { config } = useAppConfig()
   const { addItem, items: recentItems } = useRecentMedia()
   const { getItem } = useWatchProgress()
+  const { items: trackedAnime, mediaById } = useAiring()
+  const animeByTmdb = useMemo(() => {
+    const map = new Map<number, AnimeAiringInfo>()
+    for (const tracked of trackedAnime) {
+      const media = mediaById.get(tracked.anilistId)
+      if (media) {
+        map.set(tracked.tmdbId, {
+          total: media.episodes,
+          next: media.nextAiringEpisode,
+        })
+      }
+    }
+    return map
+  }, [trackedAnime, mediaById])
   const requestIdRef = useRef(0)
   const queryFromUrl = searchParams.get("q")?.trim() ?? ""
   const [inputValue, setInputValue] = useState(queryFromUrl)
@@ -234,6 +248,7 @@ export function SearchExperience() {
               items={recentItems}
               onOpen={addItem}
               getProgress={getItem}
+              animeByTmdb={animeByTmdb}
             />
           ) : (
             <EmptyPrompt />
@@ -258,6 +273,7 @@ export function SearchExperience() {
             items={searchState.items}
             onOpen={addItem}
             getProgress={getItem}
+            animeByTmdb={animeByTmdb}
           />
           {hasMoreResults ? (
             <div className="flex items-center justify-center gap-4">
@@ -280,11 +296,17 @@ export function SearchExperience() {
   )
 }
 
+type AnimeAiringInfo = {
+  total: number | null
+  next: AnilistAiringEpisode | null
+}
+
 function ResultsGrid({
   label,
   items,
   onOpen,
   getProgress,
+  animeByTmdb,
 }: {
   label: string
   items: SearchMediaItem[]
@@ -293,6 +315,7 @@ function ResultsGrid({
     mediaType: SearchMediaItem["mediaType"],
     id: number
   ) => MediaWatchProgress | undefined
+  animeByTmdb: Map<number, AnimeAiringInfo>
 }) {
   return (
     <div>
@@ -304,6 +327,7 @@ function ResultsGrid({
             item={item}
             onOpen={onOpen}
             progress={getProgress(item.mediaType, item.id)}
+            anime={animeByTmdb.get(item.id)}
           />
         ))}
       </div>
@@ -315,13 +339,16 @@ function PosterCard({
   item,
   onOpen,
   progress,
+  anime,
 }: {
   item: SearchMediaItem
   onOpen: (item: SearchMediaItem) => void
   progress?: MediaWatchProgress
+  anime?: AnimeAiringInfo
 }) {
   const posterUrl = getTmdbImageUrl(item.posterPath)
-  const watchedLabel = watchBadgeLabel(progress)
+  const secondsUntil = useCountdown(anime?.next?.airingAt ?? 0)
+  const watchedLabel = watchBadgeLabel(progress, anime, secondsUntil)
 
   return (
     <Link
@@ -346,7 +373,7 @@ function PosterCard({
           {item.mediaType === "movie" ? "FILM" : "TV"}
         </span>
         {watchedLabel ? (
-          <span className="absolute right-2.5 bottom-2.5 rounded-md bg-success px-[7px] py-[3px] font-mono text-[9px] tracking-[0.04em] text-success-foreground">
+          <span className="absolute inset-x-2 bottom-2 truncate rounded-md bg-success px-[7px] py-[3px] text-center font-mono text-[9px] tracking-[0.04em] text-success-foreground">
             {watchedLabel}
           </span>
         ) : null}
@@ -481,7 +508,11 @@ function EmptyPrompt() {
   )
 }
 
-function watchBadgeLabel(progress?: MediaWatchProgress): string | null {
+function watchBadgeLabel(
+  progress: MediaWatchProgress | undefined,
+  anime: AnimeAiringInfo | undefined,
+  secondsUntil: number
+): string | null {
   if (!progress) {
     return null
   }
@@ -491,5 +522,19 @@ function watchBadgeLabel(progress?: MediaWatchProgress): string | null {
   }
 
   const count = getWatchedEpisodeCount(progress)
-  return count > 0 ? `${count} WATCHED` : null
+
+  if (count === 0) {
+    return null
+  }
+
+  if (anime?.next) {
+    const aired = Math.max(anime.next.episode - 1, count)
+    return `${count}/${aired} · next in ${formatCountdown(secondsUntil)}`
+  }
+
+  if (anime?.total) {
+    return `${count}/${anime.total}`
+  }
+
+  return `${count} watched`
 }

@@ -155,8 +155,19 @@ function ProgressCard({
   media: AnilistMedia | undefined
   watched: number
 }) {
+  const next = media?.nextAiringEpisode ?? null
+  const secondsUntil = useCountdown(next?.airingAt ?? 0)
   const total = media?.episodes ?? null
-  const pct = total ? Math.min(100, Math.round((watched / total) * 100)) : 0
+  const aired = next ? Math.max(next.episode - 1, watched) : null
+  const denominator = total ?? aired
+  const pct = denominator
+    ? Math.min(100, Math.round((watched / denominator) * 100))
+    : 0
+  const label = next
+    ? `${watched}/${aired} · next in ${formatCountdown(secondsUntil)}`
+    : total
+      ? `${watched}/${total}`
+      : `${watched} watched`
 
   return (
     <Link
@@ -179,8 +190,8 @@ function ProgressCard({
           <div className="truncate text-[15px] font-semibold text-foreground">
             {tracked.title}
           </div>
-          <div className="mt-[5px] font-mono text-[10.5px] text-faint">
-            {total ? `${watched} / ${total} watched` : `${watched} watched`}
+          <div className="mt-[5px] truncate font-mono text-[10.5px] text-faint">
+            {label}
           </div>
         </div>
       </div>
