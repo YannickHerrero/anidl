@@ -69,10 +69,8 @@ function WatchingCard({ entry }: { entry: AnilistWatchingEntry }) {
   const info = describeProgress(progress, media)
 
   return (
-    <a
-      href={`https://anilist.co/anime/${media.id}`}
-      target="_blank"
-      rel="noreferrer"
+    <Link
+      href={`/search?q=${encodeURIComponent(media.title)}`}
       className="group flex flex-col gap-3 transition-transform duration-150 hover:-translate-y-1"
     >
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-secondary">
@@ -99,7 +97,7 @@ function WatchingCard({ entry }: { entry: AnilistWatchingEntry }) {
           {info.label}
         </div>
       </div>
-    </a>
+    </Link>
   )
 }
 
