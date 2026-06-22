@@ -1,10 +1,14 @@
 "use client"
 
+import { useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
+import { useRouter } from "next/navigation"
 
 import { useAnilistWatching } from "@/hooks/use-anilist-watching"
+import { useAppConfig } from "@/hooks/use-app-config"
 import { type AnilistMedia, type AnilistWatchingEntry } from "@/lib/anilist"
+import { searchTmdbMedia } from "@/lib/tmdb"
 import { cn } from "@/lib/utils"
 
 export function AnilistWatchingView() {
@@ -65,13 +69,45 @@ export function AnilistWatchingView() {
 }
 
 function WatchingCard({ entry }: { entry: AnilistWatchingEntry }) {
+  const router = useRouter()
+  const { config } = useAppConfig()
   const { media, progress } = entry
   const info = describeProgress(progress, media)
+  const [pending, setPending] = useState(false)
+
+  const handleOpen = async () => {
+    if (pending) {
+      return
+    }
+
+    const fallback = `/search?q=${encodeURIComponent(media.title)}`
+    setPending(true)
+
+    try {
+      const result = await searchTmdbMedia({
+        apiKey: config.tmdbApiKey,
+        query: media.title,
+      })
+
+      if (result.items.length === 1) {
+        const match = result.items[0]
+        router.push(`/media/${match.mediaType}/${match.id}`)
+        return
+      }
+
+      router.push(fallback)
+    } catch {
+      router.push(fallback)
+    }
+  }
 
   return (
-    <Link
-      href={`/search?q=${encodeURIComponent(media.title)}`}
-      className="group flex flex-col gap-3 transition-transform duration-150 hover:-translate-y-1"
+    <button
+      type="button"
+      onClick={handleOpen}
+      disabled={pending}
+      aria-busy={pending}
+      className="group flex flex-col gap-3 text-left transition-transform duration-150 hover:-translate-y-1 disabled:cursor-wait"
     >
       <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-secondary">
         {media.coverImage ? (
@@ -94,10 +130,10 @@ function WatchingCard({ entry }: { entry: AnilistWatchingEntry }) {
           {media.title}
         </div>
         <div className={cn("mt-1 font-mono text-[10.5px]", info.tone)}>
-          {info.label}
+          {pending ? "Opening…" : info.label}
         </div>
       </div>
-    </Link>
+    </button>
   )
 }
 
