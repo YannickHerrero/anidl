@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import Link from "next/link"
 import Image from "next/image"
 import { useRouter } from "next/navigation"
@@ -11,8 +11,44 @@ import { type AnilistMedia, type AnilistWatchingEntry } from "@/lib/anilist"
 import { searchTmdbMedia } from "@/lib/tmdb"
 import { cn } from "@/lib/utils"
 
+type ResolveDestination = (entry: AnilistWatchingEntry) => Promise<string>
+
 export function AnilistWatchingView() {
   const { status, entries, user } = useAnilistWatching()
+  const router = useRouter()
+  const { config } = useAppConfig()
+  const tmdbApiKey = config.tmdbApiKey
+
+  // Shared cache of in-flight/resolved destinations, keyed by AniList id, so a
+  // hover prefetch and a later click reuse the same request (no duplicate call).
+  const cacheRef = useRef<Map<number, Promise<string>>>(new Map())
+
+  const resolveDestination = useCallback<ResolveDestination>(
+    (entry) => {
+      const cached = cacheRef.current.get(entry.media.id)
+
+      if (cached) {
+        return cached
+      }
+
+      const fallback = `/search?q=${encodeURIComponent(entry.media.title)}`
+      const pending = searchTmdbMedia({ apiKey: tmdbApiKey, query: entry.media.title })
+        .then((result) => {
+          if (result.items.length === 1) {
+            const match = result.items[0]
+            return `/media/${match.mediaType}/${match.id}`
+          }
+          return fallback
+        })
+        .catch(() => fallback)
+
+      cacheRef.current.set(entry.media.id, pending)
+      // Warm the destination route once we know it.
+      void pending.then((href) => router.prefetch(href)).catch(() => {})
+      return pending
+    },
+    [tmdbApiKey, router]
+  )
 
   return (
     <div className="max-w-[1220px] px-8 py-12 pb-20 sm:px-14">
@@ -60,7 +96,11 @@ export function AnilistWatchingView() {
       ) : status === "success" ? (
         <div className="mt-9 grid grid-cols-2 gap-x-[18px] gap-y-6 sm:grid-cols-3 lg:grid-cols-5">
           {entries.map((entry) => (
-            <WatchingCard key={entry.media.id} entry={entry} />
+            <WatchingCard
+              key={entry.media.id}
+              entry={entry}
+              resolveDestination={resolveDestination}
+            />
           ))}
         </div>
       ) : null}
@@ -68,9 +108,14 @@ export function AnilistWatchingView() {
   )
 }
 
-function WatchingCard({ entry }: { entry: AnilistWatchingEntry }) {
+function WatchingCard({
+  entry,
+  resolveDestination,
+}: {
+  entry: AnilistWatchingEntry
+  resolveDestination: ResolveDestination
+}) {
   const router = useRouter()
-  const { config } = useAppConfig()
   const { media, progress } = entry
   const info = describeProgress(progress, media)
   const [pending, setPending] = useState(false)
@@ -79,32 +124,22 @@ function WatchingCard({ entry }: { entry: AnilistWatchingEntry }) {
     if (pending) {
       return
     }
-
-    const fallback = `/search?q=${encodeURIComponent(media.title)}`
     setPending(true)
+    const href = await resolveDestination(entry)
+    router.push(href)
+  }
 
-    try {
-      const result = await searchTmdbMedia({
-        apiKey: config.tmdbApiKey,
-        query: media.title,
-      })
-
-      if (result.items.length === 1) {
-        const match = result.items[0]
-        router.push(`/media/${match.mediaType}/${match.id}`)
-        return
-      }
-
-      router.push(fallback)
-    } catch {
-      router.push(fallback)
-    }
+  // Predictive prefetch: kick off the lookup as soon as the user shows intent.
+  const handlePrefetch = () => {
+    void resolveDestination(entry)
   }
 
   return (
     <button
       type="button"
       onClick={handleOpen}
+      onMouseEnter={handlePrefetch}
+      onFocus={handlePrefetch}
       disabled={pending}
       aria-busy={pending}
       className="group flex flex-col gap-3 text-left transition-transform duration-150 hover:-translate-y-1 disabled:cursor-wait"
