@@ -94,7 +94,49 @@ const AIRING_QUERY = `
   }
 `
 
+const WATCHING_QUERY = `
+  query ($userName: String, $userId: Int) {
+    MediaListCollection(
+      userName: $userName
+      userId: $userId
+      type: ANIME
+      status: CURRENT
+    ) {
+      lists {
+        entries {
+          progress
+          updatedAt
+          media {
+            ${MEDIA_FIELDS}
+          }
+        }
+      }
+    }
+  }
+`
+
 const PREFERRED_TV_FORMATS = new Set(["TV", "TV_SHORT", "ONA"])
+
+export type AnilistWatchingEntry = {
+  media: AnilistMedia
+  progress: number
+  updatedAt: number
+}
+
+type AnilistListResponse = {
+  data?: {
+    MediaListCollection?: {
+      lists?: Array<{
+        entries?: Array<{
+          progress?: number | null
+          updatedAt?: number | null
+          media?: AnilistMediaResponse | null
+        } | null> | null
+      } | null> | null
+    } | null
+  } | null
+  errors?: Array<{ message?: string }> | null
+}
 
 async function requestAnilist({
   query,
@@ -159,6 +201,85 @@ export async function fetchAnilistAiring(
     variables: { ids: validIds },
     signal,
   })
+}
+
+export function parseAnilistUser(input: string): {
+  userName: string | null
+  userId: number | null
+} {
+  const trimmed = input.trim()
+
+  if (!trimmed) {
+    return { userName: null, userId: null }
+  }
+
+  const urlMatch = trimmed.match(/anilist\.co\/user\/([^/?#]+)/i)
+
+  if (urlMatch) {
+    return { userName: decodeURIComponent(urlMatch[1]), userId: null }
+  }
+
+  if (/^\d+$/.test(trimmed)) {
+    return { userName: null, userId: Number(trimmed) }
+  }
+
+  return { userName: trimmed, userId: null }
+}
+
+export async function fetchAnilistWatching(
+  user: string,
+  signal?: AbortSignal
+): Promise<AnilistWatchingEntry[]> {
+  const { userName, userId } = parseAnilistUser(user)
+
+  if (!userName && userId === null) {
+    return []
+  }
+
+  const response = await fetch("/api/anilist", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      query: WATCHING_QUERY,
+      variables: { userName, userId },
+    }),
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`AniList request failed with status ${response.status}`)
+  }
+
+  const payload = (await response.json()) as AnilistListResponse
+
+  if (payload.errors?.length) {
+    throw new Error(
+      payload.errors[0]?.message ?? "AniList returned an error response."
+    )
+  }
+
+  const entries =
+    payload.data?.MediaListCollection?.lists?.flatMap(
+      (list) => list?.entries ?? []
+    ) ?? []
+
+  return entries
+    .flatMap((entry) => {
+      if (!entry?.media) {
+        return []
+      }
+
+      return [
+        {
+          media: normalizeAnilistMedia(entry.media),
+          progress: typeof entry.progress === "number" ? entry.progress : 0,
+          updatedAt: typeof entry.updatedAt === "number" ? entry.updatedAt : 0,
+        },
+      ]
+    })
+    .sort((left, right) => right.updatedAt - left.updatedAt)
 }
 
 export function pickBestAnilistMatch(

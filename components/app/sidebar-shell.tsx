@@ -26,8 +26,14 @@ const NAV_ITEMS: NavItem[] = [
   {
     label: "Airing",
     href: "/airing",
-    idx: "3",
+    idx: "03",
     isActive: (p) => p === "/airing",
+  },
+  {
+    label: "AniList",
+    href: "/anilist",
+    idx: "04",
+    isActive: (p) => p === "/anilist",
   },
   {
     label: "Settings",

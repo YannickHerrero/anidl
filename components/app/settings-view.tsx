@@ -24,6 +24,8 @@ export function SettingsView() {
   const [revealTmdb, setRevealTmdb] = useState(false)
   const [revealRd, setRevealRd] = useState(false)
   const [status, setStatus] = useState<SaveStatus>({ kind: "idle" })
+  const [anilistUser, setAnilistUser] = useState(config.anilistUser)
+  const [anilistSaved, setAnilistSaved] = useState(false)
 
   const handleSave = async () => {
     const nextTmdb = tmdbKey.trim()
@@ -51,12 +53,25 @@ export function SettingsView() {
       return
     }
 
-    saveConfig({ tmdbApiKey: nextTmdb, realDebridApiKey: nextRd })
+    saveConfig({
+      tmdbApiKey: nextTmdb,
+      realDebridApiKey: nextRd,
+      anilistUser: config.anilistUser,
+    })
     setStatus({ kind: "saved" })
   }
 
+  const handleSaveAnilist = () => {
+    saveConfig({
+      tmdbApiKey: config.tmdbApiKey,
+      realDebridApiKey: config.realDebridApiKey,
+      anilistUser: anilistUser.trim(),
+    })
+    setAnilistSaved(true)
+  }
+
   const handleReset = () => {
-    saveConfig({ tmdbApiKey: "", realDebridApiKey: "" })
+    saveConfig({ tmdbApiKey: "", realDebridApiKey: "", anilistUser: "" })
     router.push("/onboarding")
   }
 
@@ -126,6 +141,44 @@ export function SettingsView() {
 
       <SectionLabel>Appearance</SectionLabel>
       <ThemeRow />
+
+      <SectionLabel>AniList profile</SectionLabel>
+      <div className="rounded-[14px] border border-border bg-card p-[22px]">
+        <div className="flex items-center justify-between">
+          <span className="text-[15px] font-semibold">
+            Username, ID, or profile URL
+          </span>
+          {config.anilistUser ? (
+            <span className="flex items-center gap-1.5 font-mono text-[10px] tracking-[0.05em] text-success">
+              <span className="size-1.5 rounded-full bg-success" />
+              LINKED
+            </span>
+          ) : null}
+        </div>
+        <div className="mt-3.5 flex items-center gap-2.5 rounded-[10px] border border-border bg-background px-[15px] py-[13px]">
+          <input
+            value={anilistUser}
+            onChange={(event) => {
+              setAnilistUser(event.target.value)
+              setAnilistSaved(false)
+            }}
+            autoComplete="off"
+            placeholder="e.g. yourname or https://anilist.co/user/yourname"
+            className="flex-1 bg-transparent font-mono text-[13px] text-foreground outline-none placeholder:text-faint"
+          />
+          <button
+            type="button"
+            onClick={handleSaveAnilist}
+            className="rounded-md bg-primary px-3 py-[7px] text-[11px] font-bold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Save
+          </button>
+        </div>
+        <div className="mt-3 text-[12.5px] text-muted-foreground">
+          Powers the AniList page with your Watching list. Your AniList list must
+          be public. {anilistSaved ? "Saved." : null}
+        </div>
+      </div>
 
       <SectionLabel>Connected services</SectionLabel>
       <ConnectedServices />

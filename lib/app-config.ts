@@ -4,11 +4,13 @@ export const APP_CONFIG_STORAGE_EVENT = "anidl:app-config-change"
 export type AppConfig = {
   tmdbApiKey: string
   realDebridApiKey: string
+  anilistUser: string
 }
 
 export const emptyAppConfig: AppConfig = {
   tmdbApiKey: "",
   realDebridApiKey: "",
+  anilistUser: "",
 }
 
 let cachedConfig = emptyAppConfig
@@ -20,6 +22,7 @@ export function normalizeAppConfig(
   return {
     tmdbApiKey: input?.tmdbApiKey?.trim() ?? "",
     realDebridApiKey: input?.realDebridApiKey?.trim() ?? "",
+    anilistUser: input?.anilistUser?.trim() ?? "",
   }
 }
 
