@@ -5,7 +5,9 @@ import Link from "next/link"
 
 import { useAnilistFranchiseWatched } from "@/hooks/use-anilist-franchise"
 import { useAppConfig } from "@/hooks/use-app-config"
+import { useDownloadTracking } from "@/hooks/use-download-tracking"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
+import { isEpisodeDownloaded } from "@/lib/download-tracking"
 import {
   fetchTmdbTvSeasonDetail,
   type TvEpisodeDetail,
@@ -28,6 +30,9 @@ export function EpisodesSection({
 }) {
   const { config } = useAppConfig()
   const { getItem, markEpisodeWatched } = useWatchProgress()
+  const { getItem: getDownloadItem, markEpisodeDownloaded } =
+    useDownloadTracking()
+  const downloadProgress = getDownloadItem("tv", tmdbId)
   const anilistWatched = useAnilistFranchiseWatched(tmdbId)
   const isSynced = anilistWatched !== null
   const [selectedSeason, setSelectedSeason] = useState(1)
@@ -169,12 +174,25 @@ export function EpisodesSection({
               episode={episode}
               watched={isWatched(episode.episodeNumber)}
               synced={isSynced}
+              downloaded={isEpisodeDownloaded(
+                downloadProgress,
+                selectedSeason,
+                episode.episodeNumber
+              )}
               onToggleWatched={(watched) =>
                 markEpisodeWatched(
                   tmdbId,
                   selectedSeason,
                   episode.episodeNumber,
                   watched
+                )
+              }
+              onToggleDownloaded={(downloaded) =>
+                markEpisodeDownloaded(
+                  tmdbId,
+                  selectedSeason,
+                  episode.episodeNumber,
+                  downloaded
                 )
               }
             />
@@ -191,14 +209,18 @@ function EpisodeRow({
   episode,
   watched,
   synced,
+  downloaded,
   onToggleWatched,
+  onToggleDownloaded,
 }: {
   tmdbId: number
   seasonNumber: number
   episode: TvEpisodeDetail
   watched: boolean
   synced: boolean
+  downloaded: boolean
   onToggleWatched: (watched: boolean) => void
+  onToggleDownloaded: (downloaded: boolean) => void
 }) {
   const code = `S${String(seasonNumber).padStart(2, "0")}E${String(
     episode.episodeNumber
@@ -227,10 +249,31 @@ function EpisodeRow({
               WATCHED
             </span>
           ) : null}
+          {downloaded ? (
+            <span className="flex-none rounded-[5px] border border-primary px-1.5 py-[2px] font-mono text-[8.5px] tracking-[0.04em] text-primary">
+              ↓ DOWNLOADED
+            </span>
+          ) : null}
         </div>
         <div className="mt-[5px] font-mono text-[10.5px] text-faint">{meta}</div>
       </div>
       <div className="flex flex-none items-center gap-2">
+        <button
+          type="button"
+          onClick={() => onToggleDownloaded(!downloaded)}
+          aria-label={
+            downloaded ? "Mark as not downloaded" : "Mark as downloaded"
+          }
+          title={downloaded ? "Downloaded" : "Mark as downloaded"}
+          className={cn(
+            "rounded-[9px] border px-2.5 py-[9px] font-mono text-[11px] transition-colors",
+            downloaded
+              ? "border-primary text-primary"
+              : "border-border text-muted-foreground hover:bg-secondary"
+          )}
+        >
+          ↓
+        </button>
         {synced ? null : (
           <button
             type="button"

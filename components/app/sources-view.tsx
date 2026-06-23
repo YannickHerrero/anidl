@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 
 import { useAppConfig } from "@/hooks/use-app-config"
+import { useDownloadTracking } from "@/hooks/use-download-tracking"
+import { isEpisodeDownloaded } from "@/lib/download-tracking"
 import {
   fetchTmdbExternalIds,
   fetchTmdbMediaDetail,
@@ -42,6 +44,8 @@ export function SourcesView({
   episode,
 }: SourcesViewProps) {
   const { config } = useAppConfig()
+  const { getItem, markEpisodeDownloaded, markMovieDownloaded } =
+    useDownloadTracking()
   const [title, setTitle] = useState("")
   const [year, setYear] = useState<string | null>(null)
   const [seasons, setSeasons] = useState<
@@ -56,6 +60,22 @@ export function SourcesView({
     mediaType === "tv"
       ? `/media/tv/${tmdbId}#episodes`
       : `/media/movie/${tmdbId}`
+
+  const downloadProgress = getItem(mediaType, tmdbId)
+  const alreadyDownloaded =
+    mediaType === "movie"
+      ? downloadProgress?.mediaType === "movie"
+      : season !== null &&
+        episode !== null &&
+        isEpisodeDownloaded(downloadProgress, season, episode)
+
+  const handleDownload = () => {
+    if (mediaType === "tv" && season !== null && episode !== null) {
+      markEpisodeDownloaded(tmdbId, season, episode, true)
+    } else if (mediaType === "movie") {
+      markMovieDownloaded(tmdbId, true)
+    }
+  }
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -212,6 +232,11 @@ export function SourcesView({
                 </span>
               ) : null}
             </div>
+            {alreadyDownloaded ? (
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-primary px-2 py-1 font-mono text-[10px] tracking-[0.05em] text-primary">
+                ↓ ALREADY DOWNLOADED
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-none items-center gap-2.5">
@@ -269,7 +294,11 @@ export function SourcesView({
           <StateNote label="No sources match the active filters." />
         ) : (
           filtered.map((source) => (
-            <SourceRow key={source.id} source={source} />
+            <SourceRow
+              key={source.id}
+              source={source}
+              onDownload={handleDownload}
+            />
           ))
         )}
       </div>
@@ -277,7 +306,13 @@ export function SourcesView({
   )
 }
 
-function SourceRow({ source }: { source: TorrentioSource }) {
+function SourceRow({
+  source,
+  onDownload,
+}: {
+  source: TorrentioSource
+  onDownload: () => void
+}) {
   const href =
     source.url ??
     (source.infoHash ? `magnet:?xt=urn:btih:${source.infoHash}` : null)
@@ -349,6 +384,7 @@ function SourceRow({ source }: { source: TorrentioSource }) {
             href={href}
             target="_blank"
             rel="noreferrer"
+            onClick={onDownload}
             className={cn(
               "rounded-[10px] border border-border px-[22px] py-2.5 text-[13px] font-bold whitespace-nowrap transition-opacity hover:opacity-90",
               source.isRecommended
