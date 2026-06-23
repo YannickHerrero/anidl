@@ -5,6 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 
+import { useAnilistWatchedResolver } from "@/hooks/use-anilist-progress"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useAiring } from "@/hooks/use-airing"
 import { useCountdown } from "@/hooks/use-countdown"
@@ -52,6 +53,7 @@ export function SearchExperience() {
   const { config } = useAppConfig()
   const { addItem, items: recentItems } = useRecentMedia()
   const { getItem } = useWatchProgress()
+  const resolveAnilistWatched = useAnilistWatchedResolver()
   const { items: trackedAnime, mediaById } = useAiring()
   const animeByTmdb = useMemo(() => {
     const map = new Map<number, AnimeAiringInfo>()
@@ -250,6 +252,7 @@ export function SearchExperience() {
               onOpen={addItem}
               getProgress={getItem}
               animeByTmdb={animeByTmdb}
+              resolveAnilistWatched={resolveAnilistWatched}
             />
           ) : (
             <EmptyPrompt />
@@ -275,6 +278,7 @@ export function SearchExperience() {
             onOpen={addItem}
             getProgress={getItem}
             animeByTmdb={animeByTmdb}
+            resolveAnilistWatched={resolveAnilistWatched}
           />
           {hasMoreResults ? (
             <div className="flex items-center justify-center gap-4">
@@ -308,6 +312,7 @@ function ResultsGrid({
   onOpen,
   getProgress,
   animeByTmdb,
+  resolveAnilistWatched,
 }: {
   label: string
   items: SearchMediaItem[]
@@ -317,6 +322,7 @@ function ResultsGrid({
     id: number
   ) => MediaWatchProgress | undefined
   animeByTmdb: Map<number, AnimeAiringInfo>
+  resolveAnilistWatched: (tmdbId: number) => number | undefined
 }) {
   return (
     <div>
@@ -329,6 +335,7 @@ function ResultsGrid({
             onOpen={onOpen}
             progress={getProgress(item.mediaType, item.id)}
             anime={animeByTmdb.get(item.id)}
+            anilistWatched={resolveAnilistWatched(item.id)}
           />
         ))}
       </div>
@@ -341,14 +348,16 @@ function PosterCard({
   onOpen,
   progress,
   anime,
+  anilistWatched,
 }: {
   item: SearchMediaItem
   onOpen: (item: SearchMediaItem) => void
   progress?: MediaWatchProgress
   anime?: AnimeAiringInfo
+  anilistWatched?: number
 }) {
   const posterUrl = getTmdbImageUrl(item.posterPath)
-  const cardProgress = buildCardProgress(progress, anime)
+  const cardProgress = buildCardProgress(progress, anime, anilistWatched)
 
   return (
     <Link
@@ -510,14 +519,16 @@ function EmptyPrompt() {
 
 function buildCardProgress(
   progress: MediaWatchProgress | undefined,
-  anime: AnimeAiringInfo | undefined
+  anime: AnimeAiringInfo | undefined,
+  anilistWatched: number | undefined
 ): { label: string; tone: string } | null {
   if (progress?.mediaType === "movie") {
     return { label: "Watched", tone: "text-success" }
   }
 
   const count =
-    progress?.mediaType === "tv" ? getWatchedEpisodeCount(progress) : 0
+    anilistWatched ??
+    (progress?.mediaType === "tv" ? getWatchedEpisodeCount(progress) : 0)
 
   if (anime?.next) {
     const aired = Math.max(anime.next.episode - 1, count)

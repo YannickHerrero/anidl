@@ -5,6 +5,7 @@ import Link from "next/link"
 import Image from "next/image"
 
 import { useAiring } from "@/hooks/use-airing"
+import { useAnilistWatchedResolver } from "@/hooks/use-anilist-progress"
 import { useAnimeTracking } from "@/hooks/use-anime-tracking"
 import { useCountdown } from "@/hooks/use-countdown"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
@@ -25,12 +26,15 @@ export function AnimeListView() {
   const { items, mediaById, airing } = useAiring()
   const { removeItem } = useAnimeTracking()
   const { getItem } = useWatchProgress()
+  const resolveAnilistWatched = useAnilistWatchedResolver()
   const [filter, setFilter] = useState<ListFilter>("all")
 
   const rows = items
     .map((tracked) => {
       const media = mediaById.get(tracked.anilistId)
-      const watched = getWatchedEpisodeCount(getItem("tv", tracked.tmdbId))
+      const watched =
+        resolveAnilistWatched(tracked.tmdbId) ??
+        getWatchedEpisodeCount(getItem("tv", tracked.tmdbId))
       const total = media?.episodes ?? null
       const isAiring = Boolean(media?.nextAiringEpisode)
       const isCompleted =

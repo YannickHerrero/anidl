@@ -6,6 +6,7 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import { EpisodesSection } from "@/components/app/episodes-view"
+import { useAnilistWatchedResolver } from "@/hooks/use-anilist-progress"
 import { useAnimeTracking } from "@/hooks/use-anime-tracking"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useRecentMedia } from "@/hooks/use-recent-media"
@@ -114,7 +115,9 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
   const backdropUrl = getTmdbImageUrl(detail?.backdropPath ?? null, "w1280")
   const posterUrl = getTmdbImageUrl(detail?.posterPath ?? null, "w500")
   const movieWatched = watchProgress?.mediaType === "movie"
-  const watchedEpisodeCount = getWatchedEpisodeCount(watchProgress)
+  const resolveAnilistWatched = useAnilistWatchedResolver()
+  const watchedEpisodeCount =
+    resolveAnilistWatched(tmdbId) ?? getWatchedEpisodeCount(watchProgress)
 
   return (
     <div>

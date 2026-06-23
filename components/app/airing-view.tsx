@@ -4,6 +4,7 @@ import Link from "next/link"
 import Image from "next/image"
 
 import { useAiring, type AiringEntry } from "@/hooks/use-airing"
+import { useAnilistWatchedResolver } from "@/hooks/use-anilist-progress"
 import { useCountdown } from "@/hooks/use-countdown"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
 import { formatCountdown } from "@/lib/anilist"
@@ -14,13 +15,16 @@ import { getWatchedEpisodeCount } from "@/lib/watch-progress"
 export function AiringView() {
   const { items, mediaById, airing, status } = useAiring()
   const { getItem } = useWatchProgress()
+  const resolveAnilistWatched = useAnilistWatchedResolver()
   const isLoading = status === "loading" && items.length > 0
 
   const inProgress = items
     .map((tracked) => ({
       tracked,
       media: mediaById.get(tracked.anilistId),
-      watched: getWatchedEpisodeCount(getItem("tv", tracked.tmdbId)),
+      watched:
+        resolveAnilistWatched(tracked.tmdbId) ??
+        getWatchedEpisodeCount(getItem("tv", tracked.tmdbId)),
     }))
     .filter((entry) => entry.watched > 0)
 

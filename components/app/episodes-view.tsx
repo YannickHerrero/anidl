@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 
+import { useAnilistWatchedResolver } from "@/hooks/use-anilist-progress"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
 import {
@@ -25,6 +26,9 @@ export function EpisodesSection({
 }) {
   const { config } = useAppConfig()
   const { getItem, markEpisodeWatched } = useWatchProgress()
+  const resolveAnilistWatched = useAnilistWatchedResolver()
+  const anilistWatched = resolveAnilistWatched(tmdbId)
+  const isSynced = anilistWatched !== undefined
   const [selectedSeason, setSelectedSeason] = useState(1)
   const [season, setSeason] = useState<TvSeasonDetail | null>(null)
   const [seasonStatus, setSeasonStatus] = useState<
@@ -58,10 +62,13 @@ export function EpisodesSection({
   }, [config.tmdbApiKey, tmdbId, selectedSeason])
 
   const episodes = season?.episodes ?? []
-  const watchedInSeason = getWatchedSeasonEpisodeCount(
-    watchProgress,
-    selectedSeason
-  )
+  const isWatched = (episodeNumber: number) =>
+    isSynced
+      ? episodeNumber <= (anilistWatched ?? 0)
+      : isEpisodeWatched(watchProgress, selectedSeason, episodeNumber)
+  const watchedInSeason = isSynced
+    ? episodes.filter((episode) => isWatched(episode.episodeNumber)).length
+    : getWatchedSeasonEpisodeCount(watchProgress, selectedSeason)
   const total = episodes.length
   const pct = total ? Math.round((watchedInSeason / total) * 100) : 0
 
@@ -75,6 +82,12 @@ export function EpisodesSection({
           <span className="font-mono text-[11px] tracking-[0.08em] text-foreground">
             EPISODES
           </span>
+          {isSynced ? (
+            <span className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 font-mono text-[9px] tracking-[0.05em] text-success">
+              <span className="size-1.5 rounded-full bg-success" />
+              SYNCED FROM ANILIST
+            </span>
+          ) : null}
         </div>
         <div className="text-right">
           <div className="font-mono text-[11px] text-faint">
@@ -117,14 +130,16 @@ export function EpisodesSection({
                   )}
                 >
                   Season {seasonNumber}
-                  <span
-                    className={cn(
-                      "font-mono text-[10px]",
-                      active ? "text-success" : "text-faint"
-                    )}
-                  >
-                    {watched}
-                  </span>
+                  {isSynced ? null : (
+                    <span
+                      className={cn(
+                        "font-mono text-[10px]",
+                        active ? "text-success" : "text-faint"
+                      )}
+                    >
+                      {watched}
+                    </span>
+                  )}
                 </button>
               )
             }
@@ -146,11 +161,8 @@ export function EpisodesSection({
               tmdbId={tmdbId}
               seasonNumber={selectedSeason}
               episode={episode}
-              watched={isEpisodeWatched(
-                watchProgress,
-                selectedSeason,
-                episode.episodeNumber
-              )}
+              watched={isWatched(episode.episodeNumber)}
+              synced={isSynced}
               onToggleWatched={(watched) =>
                 markEpisodeWatched(
                   tmdbId,
@@ -172,12 +184,14 @@ function EpisodeRow({
   seasonNumber,
   episode,
   watched,
+  synced,
   onToggleWatched,
 }: {
   tmdbId: number
   seasonNumber: number
   episode: TvEpisodeDetail
   watched: boolean
+  synced: boolean
   onToggleWatched: (watched: boolean) => void
 }) {
   const code = `S${String(seasonNumber).padStart(2, "0")}E${String(
@@ -211,19 +225,21 @@ function EpisodeRow({
         <div className="mt-[5px] font-mono text-[10.5px] text-faint">{meta}</div>
       </div>
       <div className="flex flex-none items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onToggleWatched(!watched)}
-          aria-label={watched ? "Mark unwatched" : "Mark watched"}
-          className={cn(
-            "rounded-[9px] border border-border px-2.5 py-[9px] font-mono text-[11px] transition-colors",
-            watched
-              ? "bg-secondary text-foreground"
-              : "text-muted-foreground hover:bg-secondary"
-          )}
-        >
-          ✓
-        </button>
+        {synced ? null : (
+          <button
+            type="button"
+            onClick={() => onToggleWatched(!watched)}
+            aria-label={watched ? "Mark unwatched" : "Mark watched"}
+            className={cn(
+              "rounded-[9px] border border-border px-2.5 py-[9px] font-mono text-[11px] transition-colors",
+              watched
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:bg-secondary"
+            )}
+          >
+            ✓
+          </button>
+        )}
         <Link
           href={`/media/tv/${tmdbId}/sources?s=${seasonNumber}&e=${episode.episodeNumber}`}
           className="rounded-[9px] border border-border bg-secondary px-3 py-[9px] text-[12px] font-semibold whitespace-nowrap text-foreground transition-colors hover:border-primary"

@@ -226,6 +226,73 @@ export function parseAnilistUser(input: string): {
   return { userName: trimmed, userId: null }
 }
 
+const PROGRESS_QUERY = `
+  query ($userName: String, $userId: Int) {
+    MediaListCollection(userName: $userName, userId: $userId, type: ANIME) {
+      lists {
+        entries {
+          progress
+          media {
+            id
+          }
+        }
+      }
+    }
+  }
+`
+
+/**
+ * Fetches the configured user's whole anime list and returns a map of
+ * AniList media id -> episodes watched. Used as the watched-status source of
+ * truth for tracked anime. Returns an empty map for an unset/private profile.
+ */
+export async function fetchAnilistProgressMap(
+  user: string,
+  signal?: AbortSignal
+): Promise<Map<number, number>> {
+  const { userName, userId } = parseAnilistUser(user)
+
+  if (!userName && userId === null) {
+    return new Map()
+  }
+
+  const response = await fetch("/api/anilist", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      query: PROGRESS_QUERY,
+      variables: { userName, userId },
+    }),
+    signal,
+  })
+
+  if (!response.ok) {
+    throw new Error(`AniList request failed with status ${response.status}`)
+  }
+
+  const payload = (await response.json()) as AnilistListResponse
+
+  if (payload.errors?.length) {
+    return new Map()
+  }
+
+  const map = new Map<number, number>()
+
+  for (const list of payload.data?.MediaListCollection?.lists ?? []) {
+    for (const entry of list?.entries ?? []) {
+      const id = entry?.media?.id
+
+      if (typeof id === "number") {
+        map.set(id, typeof entry?.progress === "number" ? entry.progress : 0)
+      }
+    }
+  }
+
+  return map
+}
+
 export async function fetchAnilistWatching(
   user: string,
   signal?: AbortSignal
