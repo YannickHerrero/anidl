@@ -142,30 +142,32 @@ function WatchingCard({
       onFocus={handlePrefetch}
       disabled={pending}
       aria-busy={pending}
-      className="group flex flex-col gap-3 text-left transition-transform duration-150 hover:-translate-y-1 disabled:cursor-wait"
+      className="group block w-full text-left disabled:cursor-wait"
     >
-      <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-secondary">
-        {media.coverImage ? (
-          <Image
-            src={media.coverImage}
-            alt={`Cover for ${media.title}`}
-            fill
-            sizes="(min-width: 1024px) 20vw, (min-width: 640px) 33vw, 50vw"
-            className="object-cover"
-          />
-        ) : null}
-        {media.format ? (
-          <span className="absolute top-2.5 right-2.5 rounded-md bg-black/45 px-[6px] py-[3px] font-mono text-[9px] tracking-[0.06em] text-white backdrop-blur">
-            {media.format}
-          </span>
-        ) : null}
-      </div>
-      <div>
-        <div className="truncate text-[13.5px] font-semibold text-foreground">
-          {media.title}
+      <div className="flex flex-col gap-3 transition-transform duration-150 group-hover:-translate-y-1">
+        <div className="relative aspect-[2/3] overflow-hidden rounded-xl border border-border bg-secondary">
+          {media.coverImage ? (
+            <Image
+              src={media.coverImage}
+              alt={`Cover for ${media.title}`}
+              fill
+              sizes="(min-width: 1024px) 20vw, (min-width: 640px) 33vw, 50vw"
+              className="object-cover"
+            />
+          ) : null}
+          {media.format ? (
+            <span className="absolute top-2.5 right-2.5 rounded-md bg-black/45 px-[6px] py-[3px] font-mono text-[9px] tracking-[0.06em] text-white backdrop-blur">
+              {media.format}
+            </span>
+          ) : null}
         </div>
-        <div className={cn("mt-1 font-mono text-[10.5px]", info.tone)}>
-          {pending ? "Opening…" : info.label}
+        <div>
+          <div className="truncate text-[13.5px] font-semibold text-foreground">
+            {media.title}
+          </div>
+          <div className={cn("mt-1 font-mono text-[10.5px]", info.tone)}>
+            {pending ? "Opening…" : info.label}
+          </div>
         </div>
       </div>
     </button>
