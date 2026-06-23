@@ -5,6 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
+import { EpisodesSection } from "@/components/app/episodes-view"
 import { useAnimeTracking } from "@/hooks/use-anime-tracking"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useRecentMedia } from "@/hooks/use-recent-media"
@@ -160,13 +161,15 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
           <div className="mt-4 flex flex-col gap-[9px]">
             <button
               type="button"
-              onClick={() =>
-                router.push(
-                  isMovie
-                    ? `/media/movie/${tmdbId}/sources`
-                    : `/media/tv/${tmdbId}/episodes`
-                )
-              }
+              onClick={() => {
+                if (isMovie) {
+                  router.push(`/media/movie/${tmdbId}/sources`)
+                } else {
+                  document
+                    .getElementById("episodes")
+                    ?.scrollIntoView({ behavior: "smooth" })
+                }
+              }}
               className="rounded-[11px] bg-primary px-3 py-3.5 text-[14px] font-bold text-primary-foreground transition-opacity hover:opacity-90"
             >
               {isMovie ? "▸ Open sources" : "▸ View episodes"}
@@ -274,6 +277,13 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
           )}
         </div>
       </div>
+
+      {mediaType === "tv" ? (
+        <EpisodesSection
+          tmdbId={tmdbId}
+          seasonCount={detail?.seasonCount ?? 1}
+        />
+      ) : null}
     </div>
   )
 }

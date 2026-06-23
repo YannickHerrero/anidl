@@ -6,7 +6,6 @@ import Link from "next/link"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
 import {
-  fetchTmdbMediaDetail,
   fetchTmdbTvSeasonDetail,
   type TvEpisodeDetail,
   type TvSeasonDetail,
@@ -17,11 +16,15 @@ import {
 } from "@/lib/watch-progress"
 import { cn } from "@/lib/utils"
 
-export function EpisodesView({ tmdbId }: { tmdbId: number }) {
+export function EpisodesSection({
+  tmdbId,
+  seasonCount,
+}: {
+  tmdbId: number
+  seasonCount: number
+}) {
   const { config } = useAppConfig()
   const { getItem, markEpisodeWatched } = useWatchProgress()
-  const [title, setTitle] = useState<string>("")
-  const [seasonCount, setSeasonCount] = useState(1)
   const [selectedSeason, setSelectedSeason] = useState(1)
   const [season, setSeason] = useState<TvSeasonDetail | null>(null)
   const [seasonStatus, setSeasonStatus] = useState<
@@ -29,23 +32,6 @@ export function EpisodesView({ tmdbId }: { tmdbId: number }) {
   >("loading")
 
   const watchProgress = getItem("tv", tmdbId)
-
-  useEffect(() => {
-    const abortController = new AbortController()
-    void fetchTmdbMediaDetail({
-      apiKey: config.tmdbApiKey,
-      mediaType: "tv",
-      tmdbId,
-      signal: abortController.signal,
-    })
-      .then((detail) => {
-        if (abortController.signal.aborted) return
-        setTitle(detail.title)
-        setSeasonCount(detail.seasonCount ?? 1)
-      })
-      .catch(() => {})
-    return () => abortController.abort()
-  }, [config.tmdbApiKey, tmdbId])
 
   useEffect(() => {
     const abortController = new AbortController()
@@ -80,20 +66,15 @@ export function EpisodesView({ tmdbId }: { tmdbId: number }) {
   const pct = total ? Math.round((watchedInSeason / total) * 100) : 0
 
   return (
-    <div className="max-w-[1180px] px-8 py-10 pb-20 sm:px-12">
-      <Link
-        href={`/media/tv/${tmdbId}`}
-        className="mb-6 inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 font-mono text-[11px] text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-      >
-        ← {title || "Back to detail"}
-      </Link>
-
-      <div className="flex flex-wrap items-end justify-between gap-6">
-        <div>
-          <div className="font-mono text-[11px] text-faint">
-            {title.toUpperCase()} · TMDB {tmdbId}
-          </div>
-          <h1 className="display mt-2 text-[38px]">Episodes</h1>
+    <section
+      id="episodes"
+      className="max-w-[1180px] scroll-mt-6 px-6 pb-16 sm:px-12"
+    >
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex items-center gap-2.5">
+          <span className="font-mono text-[11px] tracking-[0.08em] text-foreground">
+            EPISODES
+          </span>
         </div>
         <div className="text-right">
           <div className="font-mono text-[11px] text-faint">
@@ -107,7 +88,7 @@ export function EpisodesView({ tmdbId }: { tmdbId: number }) {
         </div>
       </div>
 
-      <div className="my-[22px] h-1.5 overflow-hidden rounded-md bg-secondary">
+      <div className="my-[18px] h-1.5 overflow-hidden rounded-md bg-secondary">
         <div
           className="h-full rounded-md bg-success"
           style={{ width: `${pct}%` }}
@@ -182,7 +163,7 @@ export function EpisodesView({ tmdbId }: { tmdbId: number }) {
           ))}
         </div>
       )}
-    </div>
+    </section>
   )
 }
 

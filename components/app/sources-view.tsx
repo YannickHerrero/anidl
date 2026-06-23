@@ -50,7 +50,9 @@ export function SourcesView({
 
   const isEpisode = mediaType === "tv" && season !== null && episode !== null
   const backHref =
-    mediaType === "tv" ? `/media/tv/${tmdbId}/episodes` : `/media/movie/${tmdbId}`
+    mediaType === "tv"
+      ? `/media/tv/${tmdbId}#episodes`
+      : `/media/movie/${tmdbId}`
 
   useEffect(() => {
     const abortController = new AbortController()
