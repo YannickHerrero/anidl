@@ -44,6 +44,9 @@ export function SourcesView({
   const { config } = useAppConfig()
   const [title, setTitle] = useState("")
   const [year, setYear] = useState<string | null>(null)
+  const [seasons, setSeasons] = useState<
+    { seasonNumber: number; episodeCount: number }[]
+  >([])
   const [sources, setSources] = useState<TorrentioSource[]>([])
   const [status, setStatus] = useState<SourcesStatus>("loading")
   const [active, setActive] = useState<Set<FilterKey>>(new Set())
@@ -66,6 +69,7 @@ export function SourcesView({
         if (abortController.signal.aborted) return
         setTitle(detail.title)
         setYear(detail.year)
+        setSeasons(detail.seasons)
       })
       .catch(() => {})
     return () => abortController.abort()
@@ -144,6 +148,47 @@ export function SourcesView({
     ? `${title || "Loading"} · S${season}E${episode}`
     : title || "Loading"
 
+  const { prevHref, nextHref } = useMemo(() => {
+    if (!isEpisode || season === null || episode === null) {
+      return { prevHref: null, nextHref: null }
+    }
+
+    const counts = new Map(
+      seasons
+        .filter((entry) => entry.seasonNumber > 0)
+        .map((entry) => [entry.seasonNumber, entry.episodeCount])
+    )
+    const episodeHref = (s: number, e: number) =>
+      `/media/tv/${tmdbId}/sources?s=${s}&e=${e}`
+    const currentCount = counts.get(season) ?? null
+
+    let prev: string | null = null
+    if (episode > 1) {
+      prev = episodeHref(season, episode - 1)
+    } else {
+      const previousSeason = [...counts.keys()]
+        .filter((n) => n < season)
+        .sort((a, b) => b - a)[0]
+      if (previousSeason !== undefined) {
+        prev = episodeHref(previousSeason, counts.get(previousSeason) ?? 1)
+      }
+    }
+
+    let next: string | null = null
+    if (currentCount !== null && episode < currentCount) {
+      next = episodeHref(season, episode + 1)
+    } else if (currentCount !== null) {
+      const nextSeason = [...counts.keys()]
+        .filter((n) => n > season)
+        .sort((a, b) => a - b)[0]
+      if (nextSeason !== undefined) {
+        next = episodeHref(nextSeason, 1)
+      }
+    }
+
+    return { prevHref: prev, nextHref: next }
+  }, [isEpisode, season, episode, seasons, tmdbId])
+
   return (
     <div>
       {/* header */}
@@ -170,10 +215,16 @@ export function SourcesView({
           </div>
         </div>
         <div className="flex flex-none items-center gap-2.5">
-          <span className="font-mono text-[11px] text-muted-foreground">
+          {isEpisode ? (
+            <div className="flex items-center gap-1.5">
+              <EpisodeNavLink href={prevHref} label="← Prev" />
+              <EpisodeNavLink href={nextHref} label="Next →" />
+            </div>
+          ) : null}
+          <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
             {cachedCount} cached · {sources.length - cachedCount} uncached
           </span>
-          <span className="rounded-[7px] border border-border px-2.5 py-[7px] font-mono text-[10px] text-faint">
+          <span className="hidden rounded-[7px] border border-border px-2.5 py-[7px] font-mono text-[10px] text-faint lg:inline">
             sort: score ↓
           </span>
         </div>
@@ -348,6 +399,34 @@ function applyFilters(sources: TorrentioSource[], active: Set<FilterKey>) {
     }
     return true
   })
+}
+
+function EpisodeNavLink({
+  href,
+  label,
+}: {
+  href: string | null
+  label: string
+}) {
+  const base =
+    "rounded-[9px] border border-border px-3 py-2 font-mono text-[11px] whitespace-nowrap"
+
+  if (!href) {
+    return (
+      <span aria-disabled className={cn(base, "text-faint opacity-40")}>
+        {label}
+      </span>
+    )
+  }
+
+  return (
+    <Link
+      href={href}
+      className={cn(base, "text-foreground transition-colors hover:border-primary")}
+    >
+      {label}
+    </Link>
+  )
 }
 
 function StateNote({ label }: { label: string }) {
