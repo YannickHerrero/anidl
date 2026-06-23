@@ -7,7 +7,11 @@ import { useRouter } from "next/navigation"
 
 import { useAnilistWatching } from "@/hooks/use-anilist-watching"
 import { useAppConfig } from "@/hooks/use-app-config"
-import { type AnilistMedia, type AnilistWatchingEntry } from "@/lib/anilist"
+import {
+  baseAnimeTitle,
+  type AnilistMedia,
+  type AnilistWatchingEntry,
+} from "@/lib/anilist"
 import { searchTmdbMedia } from "@/lib/tmdb"
 import { cn } from "@/lib/utils"
 
@@ -31,8 +35,9 @@ export function AnilistWatchingView() {
         return cached
       }
 
-      const fallback = `/search?q=${encodeURIComponent(entry.media.title)}`
-      const pending = searchTmdbMedia({ apiKey: tmdbApiKey, query: entry.media.title })
+      const query = baseAnimeTitle(entry.media.title)
+      const fallback = `/search?q=${encodeURIComponent(query)}`
+      const pending = searchTmdbMedia({ apiKey: tmdbApiKey, query })
         .then((result) => {
           if (result.items.length === 1) {
             const match = result.items[0]

@@ -108,6 +108,7 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
           seasonCount: null,
           episodeCount: null,
           creators: [],
+          seasons: [],
         }
       : null)
 
@@ -285,6 +286,7 @@ export function MediaDetail({ mediaType, tmdbId }: MediaDetailProps) {
         <EpisodesSection
           tmdbId={tmdbId}
           seasonCount={detail?.seasonCount ?? 1}
+          seasonEpisodeCounts={detail?.seasons ?? []}
         />
       ) : null}
     </div>

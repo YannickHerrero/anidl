@@ -10,7 +10,7 @@ import { fetchAnilistProgressMap } from "@/lib/anilist"
 // caching the in-flight promise per configured user. Cleared if it rejects.
 let cache: { user: string; promise: Promise<Map<number, number>> } | null = null
 
-function loadProgress(user: string) {
+export function loadAnilistProgress(user: string) {
   if (cache && cache.user === user) {
     return cache.promise
   }
@@ -45,7 +45,7 @@ export function useAnilistWatchedResolver() {
     }
 
     let active = true
-    loadProgress(user)
+    loadAnilistProgress(user)
       .then((next) => {
         if (active) {
           setMap(next)

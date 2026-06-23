@@ -226,6 +226,178 @@ export function parseAnilistUser(input: string): {
   return { userName: trimmed, userId: null }
 }
 
+/**
+ * Strips trailing season/part markers from an AniList title so it matches the
+ * base show on TMDB (which groups cours under one entry). Conservative — no bare
+ * numbers or roman numerals, to avoid false strips like "Mob Psycho 100".
+ */
+export function baseAnimeTitle(title: string): string {
+  let result = title.trim()
+
+  const patterns = [
+    /\s*[:-]?\s*(?:the\s+)?final\s+season$/i,
+    /\s*[:-]?\s*\d+(?:st|nd|rd|th)\s+season$/i,
+    /\s*[:-]?\s*season\s+\d+$/i,
+    /\s*[:-]?\s*part\s+\d+$/i,
+    /\s*[:-]?\s*cour\s+\d+$/i,
+  ]
+
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const pattern of patterns) {
+      const next = result.replace(pattern, "").trim()
+      if (next && next !== result) {
+        result = next
+        changed = true
+      }
+    }
+  }
+
+  return result || title.trim()
+}
+
+export type AnilistFranchiseEntry = {
+  id: number
+  episodes: number | null
+}
+
+type AnilistRelationsResponse = {
+  data?: {
+    Media?: {
+      id: number
+      episodes?: number | null
+      relations?: {
+        edges?: Array<{
+          relationType?: string | null
+          node?: {
+            id?: number | null
+            episodes?: number | null
+            format?: string | null
+          } | null
+        } | null> | null
+      } | null
+    } | null
+  } | null
+  errors?: Array<{ message?: string }> | null
+}
+
+const RELATIONS_QUERY = `
+  query ($id: Int) {
+    Media(id: $id) {
+      id
+      episodes
+      relations {
+        edges {
+          relationType
+          node {
+            id
+            episodes
+            format
+          }
+        }
+      }
+    }
+  }
+`
+
+const relationsCache = new Map<number, Promise<AnilistRelationsResponse>>()
+
+function fetchRelations(
+  id: number,
+  signal?: AbortSignal
+): Promise<AnilistRelationsResponse> {
+  const cached = relationsCache.get(id)
+  if (cached) {
+    return cached
+  }
+
+  const promise = fetch("/api/anilist", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ query: RELATIONS_QUERY, variables: { id } }),
+    signal,
+  })
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`AniList request failed with status ${response.status}`)
+      }
+      return response.json() as Promise<AnilistRelationsResponse>
+    })
+    .catch((error: unknown) => {
+      relationsCache.delete(id)
+      throw error
+    })
+
+  relationsCache.set(id, promise)
+  return promise
+}
+
+function findRelated(
+  payload: AnilistRelationsResponse,
+  relationType: "PREQUEL" | "SEQUEL",
+  seen: Set<number>
+): AnilistFranchiseEntry | null {
+  for (const edge of payload.data?.Media?.relations?.edges ?? []) {
+    const node = edge?.node
+    if (
+      edge?.relationType === relationType &&
+      node &&
+      typeof node.id === "number" &&
+      !seen.has(node.id) &&
+      node.format !== null &&
+      node.format !== undefined &&
+      PREFERRED_TV_FORMATS.has(node.format)
+    ) {
+      return {
+        id: node.id,
+        episodes: typeof node.episodes === "number" ? node.episodes : null,
+      }
+    }
+  }
+  return null
+}
+
+/**
+ * Walks the AniList prequel/sequel chain from a starting media id and returns
+ * the franchise's TV entries ordered oldest -> newest. Used to map AniList's
+ * per-cour progress onto TMDB's grouped seasons via absolute numbering.
+ */
+export async function fetchAnilistFranchise(
+  anilistId: number,
+  signal?: AbortSignal
+): Promise<AnilistFranchiseEntry[]> {
+  const seen = new Set<number>([anilistId])
+  const startPayload = await fetchRelations(anilistId, signal)
+  const startEpisodes = startPayload.data?.Media?.episodes
+  const start: AnilistFranchiseEntry = {
+    id: anilistId,
+    episodes: typeof startEpisodes === "number" ? startEpisodes : null,
+  }
+
+  const before: AnilistFranchiseEntry[] = []
+  let cursor = startPayload
+  for (let hop = 0; hop < 12; hop += 1) {
+    const prequel = findRelated(cursor, "PREQUEL", seen)
+    if (!prequel) break
+    seen.add(prequel.id)
+    before.push(prequel)
+    cursor = await fetchRelations(prequel.id, signal)
+  }
+
+  const after: AnilistFranchiseEntry[] = []
+  cursor = startPayload
+  for (let hop = 0; hop < 12; hop += 1) {
+    const sequel = findRelated(cursor, "SEQUEL", seen)
+    if (!sequel) break
+    seen.add(sequel.id)
+    after.push(sequel)
+    cursor = await fetchRelations(sequel.id, signal)
+  }
+
+  return [...before.reverse(), start, ...after]
+}
+
 const PROGRESS_QUERY = `
   query ($userName: String, $userId: Int) {
     MediaListCollection(userName: $userName, userId: $userId, type: ANIME) {

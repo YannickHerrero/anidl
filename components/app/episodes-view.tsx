@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 
-import { useAnilistWatchedResolver } from "@/hooks/use-anilist-progress"
+import { useAnilistFranchiseWatched } from "@/hooks/use-anilist-franchise"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
 import {
@@ -20,15 +20,16 @@ import { cn } from "@/lib/utils"
 export function EpisodesSection({
   tmdbId,
   seasonCount,
+  seasonEpisodeCounts,
 }: {
   tmdbId: number
   seasonCount: number
+  seasonEpisodeCounts: { seasonNumber: number; episodeCount: number }[]
 }) {
   const { config } = useAppConfig()
   const { getItem, markEpisodeWatched } = useWatchProgress()
-  const resolveAnilistWatched = useAnilistWatchedResolver()
-  const anilistWatched = resolveAnilistWatched(tmdbId)
-  const isSynced = anilistWatched !== undefined
+  const anilistWatched = useAnilistFranchiseWatched(tmdbId)
+  const isSynced = anilistWatched !== null
   const [selectedSeason, setSelectedSeason] = useState(1)
   const [season, setSeason] = useState<TvSeasonDetail | null>(null)
   const [seasonStatus, setSeasonStatus] = useState<
@@ -62,9 +63,14 @@ export function EpisodesSection({
   }, [config.tmdbApiKey, tmdbId, selectedSeason])
 
   const episodes = season?.episodes ?? []
+  const seasonOffset = seasonEpisodeCounts
+    .filter(
+      (entry) => entry.seasonNumber > 0 && entry.seasonNumber < selectedSeason
+    )
+    .reduce((sum, entry) => sum + entry.episodeCount, 0)
   const isWatched = (episodeNumber: number) =>
     isSynced
-      ? episodeNumber <= (anilistWatched ?? 0)
+      ? seasonOffset + episodeNumber <= (anilistWatched ?? 0)
       : isEpisodeWatched(watchProgress, selectedSeason, episodeNumber)
   const watchedInSeason = isSynced
     ? episodes.filter((episode) => isWatched(episode.episodeNumber)).length

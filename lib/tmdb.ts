@@ -62,6 +62,10 @@ type TmdbTvDetailResponse = TmdbDetailBase & {
     id: number
     name: string
   }>
+  seasons?: Array<{
+    season_number?: number
+    episode_count?: number
+  }>
 }
 
 type TmdbExternalIdsResponse = {
@@ -129,6 +133,7 @@ export type MediaDetail = {
   seasonCount: number | null
   episodeCount: number | null
   creators: string[]
+  seasons: { seasonNumber: number; episodeCount: number }[]
 }
 
 export type MediaExternalIds = {
@@ -428,6 +433,7 @@ function normalizeMovieDetail(payload: TmdbMovieDetailResponse): MediaDetail {
     seasonCount: null,
     episodeCount: null,
     creators: [],
+    seasons: [],
   }
 }
 
@@ -497,6 +503,19 @@ function normalizeTvDetail(payload: TmdbTvDetailResponse): MediaDetail {
       payload.created_by
         ?.map((creator) => creator.name.trim())
         .filter((name) => name.length > 0) ?? [],
+    seasons:
+      payload.seasons
+        ?.flatMap((season) =>
+          typeof season.season_number === "number" &&
+          typeof season.episode_count === "number"
+            ? [
+                {
+                  seasonNumber: season.season_number,
+                  episodeCount: season.episode_count,
+                },
+              ]
+            : []
+        ) ?? [],
   }
 }
 
