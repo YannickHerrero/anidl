@@ -350,7 +350,7 @@ function EpisodeRow({
               WATCHED
             </span>
           ) : null}
-          {downloaded ? (
+          {downloaded && !watched ? (
             <span className="flex-none rounded-[5px] border border-primary px-1.5 py-[2px] font-mono text-[8.5px] tracking-[0.04em] text-primary">
               ↓ DOWNLOADED
             </span>
