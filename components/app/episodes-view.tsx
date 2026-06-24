@@ -1,18 +1,27 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import Link from "next/link"
 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { useAnilistFranchiseWatched } from "@/hooks/use-anilist-franchise"
 import { useAppConfig } from "@/hooks/use-app-config"
 import { useDownloadTracking } from "@/hooks/use-download-tracking"
 import { useWatchProgress } from "@/hooks/use-watch-progress"
 import { isEpisodeDownloaded } from "@/lib/download-tracking"
 import {
+  fetchTmdbExternalIds,
   fetchTmdbTvSeasonDetail,
   type TvEpisodeDetail,
   type TvSeasonDetail,
 } from "@/lib/tmdb"
+import { fetchTorrentioEpisodeSources } from "@/lib/torrentio"
 import {
   getWatchedSeasonEpisodeCount,
   isEpisodeWatched,
@@ -34,6 +43,61 @@ export function EpisodesSection({
     useDownloadTracking()
   const downloadProgress = getDownloadItem("tv", tmdbId)
   const anilistWatched = useAnilistFranchiseWatched(tmdbId)
+
+  // Resolve the best-ranked source link for an episode (cached per episode),
+  // resolving the show's IMDb id once. Used for the one-click "Download" action.
+  const tmdbApiKey = config.tmdbApiKey
+  const realDebridApiKey = config.realDebridApiKey
+  const imdbIdRef = useRef<Promise<string | null> | null>(null)
+  const bestSourceRef = useRef<Map<string, Promise<string | null>>>(new Map())
+
+  const resolveBestSource = useCallback(
+    (seasonNumber: number, episodeNumber: number): Promise<string | null> => {
+      const key = `${seasonNumber}:${episodeNumber}`
+      const cached = bestSourceRef.current.get(key)
+      if (cached) {
+        return cached
+      }
+
+      if (!imdbIdRef.current) {
+        imdbIdRef.current = fetchTmdbExternalIds({
+          apiKey: tmdbApiKey,
+          mediaType: "tv",
+          tmdbId,
+        })
+          .then((ids) => ids.imdbId)
+          .catch(() => null)
+      }
+
+      const pending = imdbIdRef.current
+        .then((imdbId) => {
+          if (!imdbId) {
+            return null
+          }
+          return fetchTorrentioEpisodeSources({
+            imdbId,
+            seasonNumber,
+            episodeNumber,
+            realDebridApiKey,
+          })
+        })
+        .then((sources) => {
+          const best = sources?.[0]
+          if (!best) {
+            return null
+          }
+          return (
+            best.url ??
+            (best.infoHash ? `magnet:?xt=urn:btih:${best.infoHash}` : null)
+          )
+        })
+        .catch(() => null)
+
+      bestSourceRef.current.set(key, pending)
+      return pending
+    },
+    [tmdbApiKey, realDebridApiKey, tmdbId]
+  )
   const isSynced = anilistWatched !== null
   const [selectedSeason, setSelectedSeason] = useState(1)
   const [season, setSeason] = useState<TvSeasonDetail | null>(null)
@@ -169,7 +233,6 @@ export function EpisodesSection({
           {episodes.map((episode) => (
             <EpisodeRow
               key={episode.id}
-              tmdbId={tmdbId}
               seasonNumber={selectedSeason}
               episode={episode}
               watched={isWatched(episode.episodeNumber)}
@@ -195,6 +258,10 @@ export function EpisodesSection({
                   downloaded
                 )
               }
+              sourcesHref={`/media/tv/${tmdbId}/sources?s=${selectedSeason}&e=${episode.episodeNumber}`}
+              onResolveBest={() =>
+                resolveBestSource(selectedSeason, episode.episodeNumber)
+              }
             />
           ))}
         </div>
@@ -204,24 +271,58 @@ export function EpisodesSection({
 }
 
 function EpisodeRow({
-  tmdbId,
-  seasonNumber,
   episode,
+  seasonNumber,
   watched,
   synced,
   downloaded,
   onToggleWatched,
   onToggleDownloaded,
+  sourcesHref,
+  onResolveBest,
 }: {
-  tmdbId: number
-  seasonNumber: number
   episode: TvEpisodeDetail
+  seasonNumber: number
   watched: boolean
   synced: boolean
   downloaded: boolean
   onToggleWatched: (watched: boolean) => void
   onToggleDownloaded: (downloaded: boolean) => void
+  sourcesHref: string
+  onResolveBest: () => Promise<string | null>
 }) {
+  // `undefined` = not resolved yet, `null` = no source, string = ready link.
+  const [bestHref, setBestHref] = useState<string | null | undefined>(undefined)
+  const [downloading, setDownloading] = useState(false)
+
+  const prefetchBest = () => {
+    onResolveBest()
+      .then((href) => setBestHref(href))
+      .catch(() => setBestHref(null))
+  }
+
+  const downloadBest = async () => {
+    // Resolved on menu-open → open synchronously so popup blockers don't fire.
+    if (bestHref !== undefined) {
+      if (bestHref) {
+        openHref(bestHref)
+        onToggleDownloaded(true)
+      }
+      return
+    }
+
+    setDownloading(true)
+    try {
+      const href = await onResolveBest()
+      setBestHref(href)
+      if (href) {
+        openHref(href)
+        onToggleDownloaded(true)
+      }
+    } finally {
+      setDownloading(false)
+    }
+  }
   const code = `S${String(seasonNumber).padStart(2, "0")}E${String(
     episode.episodeNumber
   ).padStart(2, "0")}`
@@ -257,47 +358,66 @@ function EpisodeRow({
         </div>
         <div className="mt-[5px] font-mono text-[10.5px] text-faint">{meta}</div>
       </div>
-      <div className="flex flex-none items-center gap-2">
-        <button
-          type="button"
-          onClick={() => onToggleDownloaded(!downloaded)}
-          aria-label={
-            downloaded ? "Mark as not downloaded" : "Mark as downloaded"
-          }
-          title={downloaded ? "Downloaded" : "Mark as downloaded"}
-          className={cn(
-            "rounded-[9px] border px-2.5 py-[9px] font-mono text-[11px] transition-colors",
-            downloaded
-              ? "border-primary text-primary"
-              : "border-border text-muted-foreground hover:bg-secondary"
-          )}
+      <div className="flex flex-none items-center">
+        <DropdownMenu
+          onOpenChange={(open) => {
+            if (open) {
+              prefetchBest()
+            }
+          }}
         >
-          ↓
-        </button>
-        {synced ? null : (
-          <button
-            type="button"
-            onClick={() => onToggleWatched(!watched)}
-            aria-label={watched ? "Mark unwatched" : "Mark watched"}
-            className={cn(
-              "rounded-[9px] border border-border px-2.5 py-[9px] font-mono text-[11px] transition-colors",
-              watched
-                ? "bg-secondary text-foreground"
-                : "text-muted-foreground hover:bg-secondary"
-            )}
+          <DropdownMenuTrigger
+            aria-label="Episode actions"
+            className="rounded-[9px] border border-border px-3 py-[9px] font-mono text-[13px] leading-none text-muted-foreground transition-colors hover:border-primary hover:text-foreground data-[state=open]:border-primary data-[state=open]:text-foreground"
           >
-            ✓
-          </button>
-        )}
-        <Link
-          href={`/media/tv/${tmdbId}/sources?s=${seasonNumber}&e=${episode.episodeNumber}`}
-          className="rounded-[9px] border border-border bg-secondary px-3 py-[9px] text-[12px] font-semibold whitespace-nowrap text-foreground transition-colors hover:border-primary"
-        >
-          {watched ? "Re-watch" : "Open sources"}
-        </Link>
+            ⋯
+          </DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem
+              disabled={bestHref === null}
+              onSelect={() => {
+                void downloadBest()
+              }}
+            >
+              <span>
+                {bestHref === null ? "No source found" : "Download best source"}
+              </span>
+              <span className="font-mono text-[10px] text-faint">
+                {downloading ? "…" : "↓"}
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href={sourcesHref}>
+                <span>Open sources</span>
+                <span className="font-mono text-[10px] text-faint">▸</span>
+              </Link>
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem onSelect={() => onToggleDownloaded(!downloaded)}>
+              {downloaded ? "Mark as not downloaded" : "Mark as downloaded"}
+            </DropdownMenuItem>
+            {synced ? null : (
+              <DropdownMenuItem onSelect={() => onToggleWatched(!watched)}>
+                {watched ? "Mark as unwatched" : "Mark as watched"}
+              </DropdownMenuItem>
+            )}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   )
+}
+
+function openHref(href: string) {
+  const anchor = document.createElement("a")
+  anchor.href = href
+  anchor.target = "_blank"
+  anchor.rel = "noreferrer"
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
 }
 
 function StateNote({ label }: { label: string }) {
